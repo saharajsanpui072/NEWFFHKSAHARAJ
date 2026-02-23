@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saharaj Pro Connect</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <style>
+        :root { --primary: #075e54; --secondary: #128c7e; --danger: #ea4335; --success: #34a853; }
+        body { font-family: 'Segoe UI', sans-serif; background: #e5ddd5; margin: 0; }
+        
+        /* Header & Navigation */
+        .app-bar { background: var(--primary); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        
+        /* Login Screen */
+        #auth-screen { position: fixed; inset: 0; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
+        .login-card { background: #f0f2f5; padding: 30px; border-radius: 15px; width: 80%; max-width: 350px; text-align: center; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+        
+        /* Home Dashboard */
+        .home-menu { padding: 15px; max-width: 600px; margin: auto; }
+        .user-card { background: white; margin-bottom: 10px; padding: 15px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .btn-call { background: var(--success); color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; }
+
+        /* Call Overlay / Screen */
+        #call-screen { position: fixed; inset: 0; background: black; display: none; flex-direction: column; z-index: 500; }
+        #remoteVideo { width: 100%; height: 100%; object-fit: cover; }
+        #localVideo { position: absolute; top: 20px; right: 20px; width: 120px; height: 160px; border-radius: 10px; border: 2px solid white; object-fit: cover; }
+        
+        /* In-Call Controls */
+        .call-controls { position: absolute; bottom: 40px; width: 100%; display: flex; justify-content: center; gap: 15px; }
+        .control-btn { width: 55px; height: 55px; border-radius: 50%; border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        
+        /* Incoming Call Alert */
+        #incoming-alert { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: white; padding: 20px; border-radius: 15px; width: 90%; max-width: 400px; display: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3); z-index: 2000; text-align: center; }
+        .alert-btns { display: flex; justify-content: center; gap: 20px; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+    <div id="auth-screen">
+        <div class="login-card">
+            <h2>Welcome</h2>
+            <p>Create your username to start</p>
+            <input type="text" id="usernameInput" placeholder="Enter Name...">
+            <button class="btn-call" style="width:100%" onclick="handleRegister()">Start Now</button>
+        </div>
+    </div>
+
+    <div class="app-bar">
+        <span id="myDisplayName">Saharaj App</span>
+        <button onclick="logout()" style="background:transparent; border:1px solid white; color:white; border-radius:5px; padding:5px 10px;">Logout</button>
+    </div>
+
+    <div class="home-menu">
+        <h3 style="color:#555">Online Users</h3>
+        <div id="userList">Searching for active users...</div>
+    </div>
+
+    <div id="incoming-alert">
+        <h3 id="callerNameText">Incoming Call...</h3>
+        <div class="alert-btns">
+            <button class="btn-call" onclick="acceptCall()">Accept</button>
+            <button class="btn-call" style="background:var(--danger)" onclick="rejectCall()">Decline</button>
+        </div>
+    </div>
+
+    <div id="call-screen">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <video id="localVideo" autoplay playsinline muted></video>
+        
+        <div class="call-controls">
+            <button class="control-btn" style="background:#444" id="micBtn" onclick="toggleMic()">🎤</button>
+            <button class="control-btn" style="background:#444" id="speakerBtn" onclick="toggleSpeaker()">🔊</button>
+            <button class="control-btn" style="background:#444" onclick="switchCamera()">🔄</button>
+            <button class="control-btn" style="background:var(--danger)" onclick="endCall()">📞</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Firebase Setup ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAMvHlgZmaxdNIHWMVc8nXb1h-A0YUR0qI",
+            authDomain: "mycallingapp-8677d.firebaseapp.com",
+            projectId: "mycallingapp-8677d",
+            storageBucket: "mycallingapp-8677d.firebasestorage.app",
+            messagingSenderId: "75951551570",
+            appId: "1:75951551570:android:d7de2090c4c70bba7fdb8b"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        let myId = localStorage.getItem('saharaj_user_id');
+        let myName = localStorage.getItem('saharaj_user_name');
+        let localStream, remoteStream, pc, currentCallId;
+        const servers = { iceServers: [{ urls: ['stun:stun1.l.google.com:19302'] }] };
+
+        // Auto Login Logic
+        window.onload = () => {
+            if (myId && myName) {
+                initApp();
+            }
+        };
+
+        function handleRegister() {
+            const name = document.getElementById('usernameInput').value;
+            if (!name) return alert("Enter a name");
+            myId = name + "_" + Math.floor(Math.random() * 999);
+            myName = name;
+            localStorage.setItem('saharaj_user_id', myId);
+            localStorage.setItem('saharaj_user_name', myName);
+            initApp();
+        }
+
+        async function initApp() {
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('myDisplayName').innerText = "Hi, " + myName;
+            
+            // Register as Online
+            await db.collection('users').doc(myId).set({ name: myName, status: 'online', incoming: null });
+
+            // Camera Setup
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+
+            // Listen for Users
+            db.collection('users').where('status', '==', 'online').onSnapshot(snap => {
+                const list = document.getElementById('userList');
+                list.innerHTML = '';
+                snap.forEach(doc => {
+                    if (doc.id !== myId) {
+                        list.innerHTML += `<div class="user-card"><span>${doc.data().name}</span><button class="btn-call" onclick="startCall('${doc.id}')">Call</button></div>`;
+                    }
+                });
+            });
+
+            // Listen for Incoming
+            db.collection('users').doc(myId).onSnapshot(snap => {
+                const data = snap.data();
+                if (data?.incoming) {
+                    currentCallId = data.incoming;
+                    document.getElementById('callerNameText').innerText = data.callerName + " is calling...";
+                    document.getElementById('incoming-alert').style.display = 'block';
+                }
+            });
+        }
+
+        // Calling Logic
+        async function startCall(targetId) {
+            setupPC();
+            const callDoc = db.collection('calls').doc();
+            currentCallId = callDoc.id;
+
+            pc.onicecandidate = e => e.candidate && callDoc.collection('offCand').add(e.candidate.toJSON());
+            
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            await callDoc.set({ offer: { sdp: offer.sdp, type: offer.type } });
+
+            await db.collection('users').doc(targetId).update({ incoming: callDoc.id, callerName: myName });
+            
+            document.getElementById('call-screen').style.display = 'flex';
+
+            callDoc.onSnapshot(s => { if(s.data()?.answer && !pc.currentRemoteDescription) pc.setRemoteDescription(new RTCSessionDescription(s.data().answer)) });
+            callDoc.collection('ansCand').onSnapshot(s => s.docChanges().forEach(c => c.type==='added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
+        }
+
+        async function acceptCall() {
+            document.getElementById('incoming-alert').style.display = 'none';
+            document.getElementById('call-screen').style.display = 'flex';
+            setupPC();
+            const callDoc = db.collection('calls').doc(currentCallId);
+            
+            pc.onicecandidate = e => e.candidate && callDoc.collection('ansCand').add(e.candidate.toJSON());
+            
+            const callData = (await callDoc.get()).data();
+            await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
+            
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            await callDoc.update({ answer: { sdp: answer.sdp, type: answer.type } });
+
+            callDoc.collection('offCand').onSnapshot(s => s.docChanges().forEach(c => c.type==='added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
+        }
+
+        function setupPC() {
+            pc = new RTCPeerConnection(servers);
+            remoteStream = new MediaStream();
+            localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+            pc.ontrack = e => e.streams[0].getTracks().forEach(t => remoteStream.addTrack(t));
+            document.getElementById('remoteVideo').srcObject = remoteStream;
+        }
+
+        // Control Functions
+        function toggleMic() {
+            const track = localStream.getAudioTracks()[0];
+            track.enabled = !track.enabled;
+            document.getElementById('micBtn').innerText = track.enabled ? "🎤" : "🔇";
+        }
+
+        function toggleSpeaker() {
+            const video = document.getElementById('remoteVideo');
+            video.muted = !video.muted; // Simple toggle for testing, volume control varies by browser
+            document.getElementById('speakerBtn').innerText = video.muted ? "🔇" : "🔊";
+        }
+
+        async function switchCamera() {
+            const currentTrack = localStream.getVideoTracks()[0];
+            const newMode = currentTrack.getSettings().facingMode === 'user' ? 'environment' : 'user';
+            currentTrack.stop();
+            const newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: newMode }, audio: true });
+            const newTrack = newStream.getVideoTracks()[0];
+            pc.getSenders().find(s => s.track.kind === 'video').replaceTrack(newTrack);
+            localStream.removeTrack(currentTrack);
+            localStream.addTrack(newTrack);
+            document.getElementById('localVideo').srcObject = localStream;
+        }
+
+        function rejectCall() {
+            db.collection('users').doc(myId).update({ incoming: null });
+            document.getElementById('incoming-alert').style.display = 'none';
+        }
+
+        function endCall() { location.reload(); }
+        function logout() { localStorage.clear(); location.reload(); }
+    </script>
+</body>
+</html>
