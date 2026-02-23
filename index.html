@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Saharaj Call Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; }
+        .chat-area { height: calc(100vh - 130px); overflow-y: auto; scroll-behavior: smooth; }
+        .msg { max-width: 80%; padding: 10px 15px; border-radius: 15px; margin-bottom: 5px; position: relative; font-size: 16px; }
+        .sent { background: #dcf8c6; align-self: flex-end; margin-left: auto; border-bottom-right-radius: 2px; }
+        .received { background: #fff; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .call-screen { display: none; position: fixed; inset: 0; background: #128c7e; z-index: 999; color: white; flex-direction: column; align-items: center; justify-content: space-around; }
+        .self-video { position: absolute; top: 20px; right: 20px; width: 100px; height: 150px; background: #000; border-radius: 10px; border: 2px solid #fff; object-fit: cover; }
+        .remote-video { width: 100%; height: 100%; object-fit: cover; background: #222; }
+        .network-tower { display: flex; align-items: flex-end; gap: 2px; height: 15px; }
+        .tower-bar { width: 3px; background: #fff; border-radius: 1px; }
+        .btn-action { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; }
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+
+    <div id="login-ui" class="flex flex-col items-center justify-center h-full bg-white p-8">
+        <h1 class="text-3xl font-bold text-green-600 mb-6">Welcome Mr. Saharaj</h1>
+        <input id="user-name-input" type="text" placeholder="Enter Your Name" class="w-full p-4 border rounded-xl mb-4 text-center text-lg outline-none border-green-500">
+        <button onclick="registerUser()" class="w-full bg-green-600 text-white p-4 rounded-xl font-bold text-xl">Get Started</button>
+    </div>
+
+    <div id="home-ui" class="hidden flex flex-col h-full">
+        <div class="bg-green-700 text-white p-4 flex justify-between items-center shadow-lg">
+            <span class="text-xl font-bold">Saharaj Call</span>
+            <div id="my-info" class="text-sm">Online</div>
+        </div>
+        <div id="user-list" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+    </div>
+
+    <div id="chat-ui" class="hidden flex flex-col h-full bg-[#e5ddd5]">
+        <div class="bg-green-700 text-white p-3 flex items-center gap-3">
+            <button onclick="goBack()" class="text-2xl">←</button>
+            <div class="flex-1">
+                <h2 id="chat-user-title" class="font-bold text-lg">Username</h2>
+                <p id="chat-user-status" class="text-xs opacity-80">Online</p>
+            </div>
+            <div class="flex gap-4 pr-2">
+                <button onclick="initiateCall('audio')" class="text-xl">📞</button>
+                <button onclick="initiateCall('video')" class="text-xl">📹</button>
+            </div>
+        </div>
+        <div id="chat-messages" class="chat-area p-4 flex flex-col"></div>
+        <div class="p-3 bg-white flex items-center gap-2">
+            <button class="text-2xl opacity-60">📎</button>
+            <input id="chat-input" type="text" placeholder="Type a message" class="flex-1 p-3 bg-gray-100 rounded-full outline-none">
+            <button onclick="sendMessage()" class="bg-green-600 text-white p-3 rounded-full w-12 h-12 flex items-center justify-center">➤</button>
+        </div>
+    </div>
+
+    <div id="call-ui" class="call-screen">
+        <video id="remote-video" class="remote-video" autoplay playsinline></video>
+        <video id="local-video" class="self-video" autoplay playsinline muted></video>
+        
+        <div class="absolute top-10 text-center">
+            <h2 id="calling-name" class="text-2xl font-bold">Calling...</h2>
+            <p id="call-duration" class="text-lg">00:00</p>
+            <div class="flex justify-center gap-10 mt-4">
+                <div class="flex flex-col items-center">
+                    <span class="text-[10px]">Me</span>
+                    <div class="network-tower"><div class="tower-bar h-1"></div><div class="tower-bar h-2"></div><div class="tower-bar h-3"></div><div class="tower-bar h-4"></div></div>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-[10px]">User</span>
+                    <div class="network-tower"><div class="tower-bar h-1"></div><div class="tower-bar h-2"></div><div class="tower-bar h-3"></div><div class="tower-bar h-4"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="absolute bottom-10 flex gap-6">
+            <div onclick="toggleMic()" id="mic-btn" class="btn-action bg-gray-800">🎙️</div>
+            <div onclick="toggleVideo()" id="vid-btn" class="btn-action bg-gray-800">📷</div>
+            <div onclick="switchCamera()" class="btn-action bg-blue-600">🔄</div>
+            <div onclick="endCall()" class="btn-action bg-red-600">📵</div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAMvHlgZmaxdNIHWMVc8nXb1h-A0YUR0qI",
+            authDomain: "mycallingapp-8677d.firebaseapp.com",
+            projectId: "mycallingapp-8677d",
+            storageBucket: "mycallingapp-8677d.firebasestorage.app",
+            messagingSenderId: "75951551570",
+            appId: "1:75951551570:android:d7de2090c4c70bba7fdb8b"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        let myName = localStorage.getItem("saharaj_user_name") || "";
+        let chatTarget = "";
+        let callTimer = null;
+        let localStream = null;
+
+        // Auto-Login Check
+        window.onload = () => {
+            if(myName) {
+                document.getElementById('login-ui').classList.add('hidden');
+                document.getElementById('home-ui').classList.remove('hidden');
+                updateStatus("Online");
+                loadUserList();
+            }
+        };
+
+        function registerUser() {
+            const input = document.getElementById('user-name-input').value.trim();
+            if(!input) return alert("Please enter a name");
+            myName = input;
+            localStorage.setItem("saharaj_user_name", myName);
+            updateStatus("Online");
+            location.reload();
+        }
+
+        function updateStatus(status) {
+            if(!myName) return;
+            db.collection("users").doc(myName).set({
+                name: myName,
+                status: status,
+                lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        }
+
+        function loadUserList() {
+            db.collection("users").onSnapshot(snap => {
+                const list = document.getElementById('user-list');
+                list.innerHTML = "";
+                snap.forEach(doc => {
+                    const u = doc.data();
+                    if(u.name !== myName) {
+                        list.innerHTML += `
+                            <div onclick="openChat('${u.name}')" class="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center">
+                                <div>
+                                    <h3 class="font-bold text-lg">${u.name}</h3>
+                                    <p class="text-xs ${u.status === 'Online' ? 'text-green-500' : 'text-gray-400'}">${u.status}</p>
+                                </div>
+                                <span class="text-green-600 font-bold">CHAT</span>
+                            </div>
+                        `;
+                    }
+                });
+            });
+        }
+
+        function openChat(target) {
+            chatTarget = target;
+            document.getElementById('home-ui').classList.add('hidden');
+            document.getElementById('chat-ui').classList.remove('hidden');
+            document.getElementById('chat-user-title').innerText = target;
+            loadMessages();
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            if(!input.value) return;
+            db.collection("messages").add({
+                text: input.value,
+                sender: myName,
+                receiver: chatTarget,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                expiresAt: Date.now() + (24 * 60 * 60 * 1000) // 24 Hours Auto Delete
+            });
+            input.value = "";
+            input.focus();
+        }
+
+        function loadMessages() {
+            db.collection("messages").orderBy("timestamp", "asc").onSnapshot(snap => {
+                const box = document.getElementById('chat-messages');
+                box.innerHTML = "";
+                snap.forEach(doc => {
+                    const m = doc.data();
+                    // Auto-delete logic
+                    if(Date.now() > m.expiresAt) {
+                        db.collection("messages").doc(doc.id).delete();
+                        return;
+                    }
+                    if((m.sender === myName && m.receiver === chatTarget) || (m.sender === chatTarget && m.receiver === myName)) {
+                        const time = m.timestamp ? new Date(m.timestamp.toMillis()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "";
+                        box.innerHTML += `
+                            <div class="msg ${m.sender === myName ? 'sent' : 'received'} shadow-sm">
+                                ${m.text}
+                                <div class="text-[10px] opacity-50 text-right mt-1">${time}</div>
+                            </div>
+                        `;
+                    }
+                });
+                box.scrollTop = box.scrollHeight;
+            });
+        }
+
+        // Calling Logic
+        async function initiateCall(type) {
+            document.getElementById('call-ui').style.display = "flex";
+            document.getElementById('calling-name').innerText = "Calling " + chatTarget;
+            
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
+            document.getElementById('local-video').srcObject = localStream;
+
+            // Start Timer (Simulating acceptance)
+            let sec = 0;
+            callTimer = setInterval(() => {
+                sec++;
+                let m = Math.floor(sec/60);
+                let s = sec % 60;
+                document.getElementById('call-duration').innerText = `${m < 10 ? '0'+m : m}:${s < 10 ? '0'+s : s}`;
+            }, 1000);
+        }
+
+        function endCall() {
+            if(localStream) localStream.getTracks().forEach(t => t.stop());
+            clearInterval(callTimer);
+            document.getElementById('call-ui').style.display = "none";
+        }
+
+        function toggleMic() {
+            const audioTrack = localStream.getAudioTracks()[0];
+            audioTrack.enabled = !audioTrack.enabled;
+            document.getElementById('mic-btn').innerText = audioTrack.enabled ? "🎙️" : "🚫";
+        }
+
+        function toggleVideo() {
+            const videoTrack = localStream.getVideoTracks()[0];
+            videoTrack.enabled = !videoTrack.enabled;
+            document.getElementById('vid-btn').innerText = videoTrack.enabled ? "📷" : "🚫";
+        }
+
+        function goBack() {
+            document.getElementById('chat-ui').classList.add('hidden');
+            document.getElementById('home-ui').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
