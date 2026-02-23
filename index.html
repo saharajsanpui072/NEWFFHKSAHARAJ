@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Saharaj Call - Advanced Communication App</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-storage-compat.js"></script>
+
+    <style>
+        /* CSS: Dynamic UI & Animations */
+        :root {
+            --primary: #007bff;
+            --bg: #f4f7f6;
+            --white: #ffffff;
+            --online: #28a745;
+            --offline: #dc3545;
+        }
+
+        body, html { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); overflow: hidden; height: 100%; }
+
+        /* Login Screen */
+        #login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: linear-gradient(135deg, #007bff, #00c6ff); }
+        .login-box { background: var(--white); padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 80%; text-align: center; }
+        input[type="text"] { width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 10px; }
+        button { width: 100%; padding: 12px; margin: 5px 0; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-login { background: var(--primary); color: white; }
+        .btn-reg { background: #6c757d; color: white; }
+
+        /* Home Screen */
+        #home-screen { display: none; height: 100vh; flex-direction: column; }
+        .header { background: var(--white); padding: 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .ping-box { font-size: 12px; color: #666; }
+        .user-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .user-card { background: var(--white); margin-bottom: 10px; padding: 15px; border-radius: 15px; display: flex; align-items: center; cursor: pointer; position: relative; }
+        .profile-pic { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; margin-right: 15px; }
+        .badge { color: #007bff; margin-left: 5px; font-size: 14px; }
+        .unread-badge { position: absolute; right: 20px; background: #007bff; color: white; border-radius: 50%; padding: 2px 7px; font-size: 10px; }
+
+        /* Chat Screen */
+        #chat-screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 100; flex-direction: column; }
+        .chat-header { padding: 10px; background: var(--white); display: flex; align-items: center; border-bottom: 1px solid #eee; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 15px; background: #e5ddd5; }
+        .msg { max-width: 70%; padding: 10px; margin-bottom: 10px; border-radius: 15px; position: relative; font-size: 14px; }
+        .msg.sent { background: #dcf8c6; align-self: flex-end; margin-left: auto; }
+        .msg.received { background: white; align-self: flex-start; }
+        .msg-time { font-size: 9px; color: #888; display: block; text-align: right; }
+        .tick { font-size: 10px; margin-left: 5px; }
+
+        .chat-input-area { padding: 10px; display: flex; align-items: center; background: white; }
+        .chat-input-area input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 20px; outline: none; }
+
+        /* Video Call UI */
+        #video-call-screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 200; }
+        #remote-video { width: 100%; height: 100%; object-fit: cover; }
+        #local-video { position: absolute; top: 20px; right: 20px; width: 120px; height: 160px; border-radius: 10px; border: 2px solid white; object-fit: cover; transition: 0.3s; z-index: 201; }
+        .call-controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 20px; }
+        .call-btn { width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; color: white; }
+        .btn-hangup { background: #dc3545; }
+        .timer { position: absolute; top: 50px; width: 100%; text-align: center; color: white; font-size: 18px; }
+
+        /* Incoming Call */
+        #incoming-call { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 300; text-align: center; color: white; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <div class="login-box">
+            <h2>Welcome Mr. Saharaj</h2>
+            <input type="text" id="username" placeholder="Enter Your Name">
+            <button class="btn-login" onclick="login()">Login</button>
+            <button class="btn-reg" onclick="register()">Register</button>
+        </div>
+    </div>
+
+    <div id="home-screen">
+        <div class="header">
+            <div class="ping-box">Ping: <span id="ms-ping">0ms</span> <span id="online-dot">●</span></div>
+            <div id="my-profile-name" onclick="openProfile()">Mr. Saharaj</div>
+            <button onclick="logout()">Logout</button>
+        </div>
+        <div class="user-list" id="user-list">
+            </div>
+    </div>
+
+    <div id="chat-screen">
+        <div class="chat-header">
+            <button onclick="closeChat()">Back</button>
+            <img id="chat-user-img" src="https://via.placeholder.com/50" class="profile-pic">
+            <div style="flex: 1">
+                <b id="chat-user-name">User</b>
+                <div id="chat-user-status" style="font-size: 10px">Offline</div>
+            </div>
+            <button onclick="startVideoCall()">📹</button>
+            <button onclick="showHistory()">📜</button>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-area">
+            <button onclick="document.getElementById('img-input').click()">📷</button>
+            <input type="file" id="img-input" style="display:none" onchange="sendImage(this)">
+            <input type="text" id="msg-input" placeholder="Type a message...">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <div id="video-call-screen">
+        <video id="remote-video" autoplay playsinline></video>
+        <video id="local-video" autoplay playsinline muted onclick="swapVideo()"></video>
+        <div class="timer" id="call-timer">00:00</div>
+        <div class="call-controls">
+            <button class="call-btn" id="toggle-mic" onclick="toggleMic()">🎤</button>
+            <button class="call-btn btn-hangup" onclick="endCall()">📞</button>
+            <button class="call-btn" id="toggle-cam" onclick="toggleCam()">📷</button>
+            <button class="call-btn" onclick="switchCamera()">🔄</button>
+        </div>
+    </div>
+
+    <div id="incoming-call">
+        <h1 style="margin-top: 100px;">Incoming Call...</h1>
+        <h2 id="caller-name">User Name</h2>
+        <div style="margin-top: 50px;">
+            <button class="call-btn" style="background: #28a745; width: 80px; height: 80px;" onclick="acceptCall()">Accept</button>
+            <button class="call-btn btn-hangup" style="width: 80px; height: 80px;" onclick="rejectCall()">Reject</button>
+        </div>
+    </div>
+
+    <audio id="ringtone" src="https://assets.mixkit.co/sfx/preview/mixkit-phone-ringing-bell-585.mp3" loop></audio>
+
+    <script>
+        // --- UPDATED FIREBASE CONFIGURATION (callme-cc20a) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAF8MmsCsrEn_VYgVVhvGrzR4mkecxU10Y",
+            authDomain: "callme-cc20a.firebaseapp.com",
+            projectId: "callme-cc20a",
+            storageBucket: "callme-cc20a.firebasestorage.app",
+            messagingSenderId: "145890956445",
+            appId: "1:145890956445:android:34788244c9bc6cb8c7b074",
+            databaseURL: "https://callme-cc20a-default-rtdb.firebaseio.com/"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const storage = firebase.storage();
+
+        let currentUser = null;
+        let selectedUser = null;
+        let localStream;
+        let peerConnection;
+        let callTimerInterval;
+
+        const rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+        window.onload = () => {
+            const savedUser = localStorage.getItem('saharaj_user');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                startApp();
+            }
+        };
+
+        // --- LOGIN & REGISTER UPDATED TO SAVE DATA ---
+        function login() {
+            let name = document.getElementById('username').value;
+            if (!name) return alert("Enter Name");
+            let userId = name.replace(/\s/g, '_').toLowerCase() + "_" + Math.floor(Math.random() * 1000);
+            currentUser = { name: name, id: userId };
+            
+            // Save to database so others can see you
+            db.ref('users/' + userId).set({
+                name: name,
+                online: true,
+                lastSeen: Date.now()
+            }).then(() => {
+                localStorage.setItem('saharaj_user', JSON.stringify(currentUser));
+                startApp();
+            });
+        }
+        
+        function register() { login(); }
+
+        function startApp() {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('home-screen').style.display = 'flex';
+            document.getElementById('my-profile-name').innerText = "Welcome " + currentUser.name;
+            updateStatus(true);
+            loadUsers();
+            trackPing();
+            listenForCalls();
+        }
+
+        function updateStatus(status) {
+            if (currentUser) {
+                db.ref('users/' + currentUser.id).update({
+                    online: status,
+                    lastSeen: Date.now(),
+                    name: currentUser.name
+                });
+                if (!status) db.ref('users/' + currentUser.id).onDisconnect().update({ online: false });
+            }
+        }
+
+        window.onblur = () => updateStatus(false);
+        window.onfocus = () => updateStatus(true);
+
+        function trackPing() {
+            setInterval(() => {
+                let start = Date.now();
+                db.ref('.info/connected').once('value', () => {
+                    let diff = Date.now() - start;
+                    document.getElementById('ms-ping').innerText = diff + "ms";
+                });
+            }, 3000);
+        }
+
+        // --- LOAD USERS MODIFIED TO SHOW ALL REGISTERED ---
+        function loadUsers() {
+            db.ref('users').on('value', snap => {
+                const list = document.getElementById('user-list');
+                list.innerHTML = "";
+                snap.forEach(child => {
+                    if (child.key !== currentUser.id) {
+                        let user = child.val();
+                        let html = `
+                            <div class="user-card" onclick="openChat('${child.key}', '${user.name}')">
+                                <img src="${user.pic || 'https://via.placeholder.com/50'}" class="profile-pic">
+                                <div>
+                                    <b>${user.name}</b> ${user.role === 'admin' ? '<span class="badge">✔</span>' : ''}
+                                    <div style="font-size:10px; color:${user.online ? 'green' : 'gray'}">${user.online ? 'Online' : 'Offline'}</div>
+                                </div>
+                                <span class="unread-badge" id="unread-${child.key}" style="display:none">0</span>
+                            </div>
+                        `;
+                        list.innerHTML += html;
+                    }
+                });
+            });
+        }
+
+        function openChat(id, name) {
+            selectedUser = { id, name };
+            document.getElementById('chat-screen').style.display = 'flex';
+            document.getElementById('chat-user-name').innerText = name;
+            loadMessages();
+        }
+
+        function closeChat() { document.getElementById('chat-screen').style.display = 'none'; }
+
+        function sendMessage() {
+            let text = document.getElementById('msg-input').value;
+            if (!text) return;
+            let msgData = {
+                sender: currentUser.id,
+                text: text,
+                time: Date.now(),
+                type: 'text',
+                seen: false
+            };
+            db.ref('chats/' + getChatId()).push(msgData);
+            document.getElementById('msg-input').value = "";
+        }
+
+        function getChatId() {
+            return currentUser.id < selectedUser.id ? currentUser.id + "_" + selectedUser.id : selectedUser.id + "_" + currentUser.id;
+        }
+
+        function loadMessages() {
+            db.ref('chats/' + getChatId()).on('value', snap => {
+                const box = document.getElementById('chat-messages');
+                box.innerHTML = "";
+                snap.forEach(child => {
+                    let m = child.val();
+                    let side = m.sender === currentUser.id ? 'sent' : 'received';
+                    let time = new Date(m.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    box.innerHTML += `
+                        <div class="msg ${side}">
+                            ${m.text}
+                            <span class="msg-time">${time} <span class="tick">${m.seen ? '✔✔' : '✔'}</span></span>
+                        </div>
+                    `;
+                    if (m.sender !== currentUser.id && !m.seen) {
+                        db.ref('chats/' + getChatId() + '/' + child.key).update({ seen: true });
+                    }
+                });
+                box.scrollTop = box.scrollHeight;
+            });
+        }
+
+        async function startVideoCall() {
+            document.getElementById('video-call-screen').style.display = 'block';
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('local-video').srcObject = localStream;
+
+            peerConnection = new RTCPeerConnection(rtcConfig);
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            peerConnection.onicecandidate = e => {
+                if (e.candidate) db.ref('calls/' + selectedUser.id).update({ candidate: JSON.stringify(e.candidate) });
+            };
+
+            peerConnection.ontrack = e => {
+                document.getElementById('remote-video').srcObject = e.streams[0];
+                startTimer();
+            };
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            db.ref('calls/' + selectedUser.id).set({
+                offer: JSON.stringify(offer),
+                caller: currentUser.id,
+                callerName: currentUser.name,
+                type: 'video'
+            });
+        }
+
+        function listenForCalls() {
+            db.ref('calls/' + currentUser.id).on('value', async snap => {
+                let call = snap.val();
+                if (call && call.offer && !peerConnection) {
+                    document.getElementById('incoming-call').style.display = 'block';
+                    document.getElementById('caller-name').innerText = call.callerName;
+                    document.getElementById('ringtone').play();
+                    selectedUser = { id: call.caller, name: call.callerName };
+                }
+            });
+        }
+
+        async function acceptCall() {
+            document.getElementById('incoming-call').style.display = 'none';
+            document.getElementById('ringtone').pause();
+            document.getElementById('video-call-screen').style.display = 'block';
+
+            let snap = await db.ref('calls/' + currentUser.id).once('value');
+            let call = snap.val();
+
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('local-video').srcObject = localStream;
+
+            peerConnection = new RTCPeerConnection(rtcConfig);
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            peerConnection.onicecandidate = e => {
+                if (e.candidate) db.ref('calls/' + call.caller).update({ candidate: JSON.stringify(e.candidate) });
+            };
+
+            peerConnection.ontrack = e => {
+                document.getElementById('remote-video').srcObject = e.streams[0];
+                startTimer();
+            };
+
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(call.offer)));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+
+            db.ref('calls/' + call.caller).update({ answer: JSON.stringify(answer) });
+        }
+
+        function startTimer() {
+            let sec = 0;
+            callTimerInterval = setInterval(() => {
+                sec++;
+                let m = Math.floor(sec / 60);
+                let s = sec % 60;
+                document.getElementById('call-timer').innerText = `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
+            }, 1000);
+        }
+
+        function endCall() {
+            if (localStream) localStream.getTracks().forEach(t => t.stop());
+            if (peerConnection) peerConnection.close();
+            db.ref('calls/' + currentUser.id).remove();
+            if (selectedUser) db.ref('calls/' + selectedUser.id).remove();
+            location.reload();
+        }
+
+        function swapVideo() {
+            let local = document.getElementById('local-video');
+            if (local.style.width === '100%') {
+                local.style.width = '120px'; local.style.height = '160px'; local.style.top = '20px';
+            } else {
+                local.style.width = '100%'; local.style.height = '100%'; local.style.top = '0'; local.style.right = '0';
+            }
+        }
+
+        function logout() { localStorage.clear(); location.reload(); }
+
+        // Placeholder functions for original buttons
+        function openProfile() { alert("Profile Clicked"); }
+        function showHistory() { alert("History Clicked"); }
+        function sendImage(input) { alert("Image selected: " + input.files[0].name); }
+
+    </script>
+</body>
+</html>
