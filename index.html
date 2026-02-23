@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>G77 Master Controller | Professional Admin</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --violet: #a855f7;
+            --text: #f8fafc;
+        }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
+        .card { background: var(--card); border-radius: 15px; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 1px solid #334155; }
+        h2 { color: var(--accent); font-size: 1.2rem; margin-top: 0; display: flex; align-items: center; gap: 10px; }
+        
+        /* User List Styling */
+        .user-container { max-height: 400px; overflow-y: auto; margin-top: 15px; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th, td { padding: 12px; border-bottom: 1px solid #334155; font-size: 14px; }
+        th { background: #0f172a; color: var(--accent); position: sticky; top: 0; }
+        
+        /* Inputs & Buttons */
+        input { background: #0f172a; border: 1px solid #334155; color: white; padding: 10px; border-radius: 8px; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+        .btn { border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; display: inline-block; }
+        .btn-green { background: var(--success); color: white; }
+        .btn-red { background: var(--danger); color: white; }
+        .btn-violet { background: var(--violet); color: white; }
+        .btn-full { width: 100%; margin-top: 5px; }
+        .btn:hover { opacity: 0.8; transform: scale(1.02); }
+
+        /* Stats */
+        .stat-grid { display: flex; justify-content: space-around; background: #0f172a; padding: 15px; border-radius: 10px; margin-bottom: 15px; }
+        .stat-item { text-align: center; }
+        .live-dot { height: 10px; width: 10px; background: var(--success); border-radius: 50%; display: inline-block; animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1><i class="fas fa-user-shield"></i> G77 MASTER CONTROL CENTER</h1>
+    <p><span class="live-dot"></span> DATABASE CONNECTED: <b>g77-game</b></p>
+</div>
+
+<div class="grid">
+    
+    <div class="card">
+        <h2><i class="fas fa-gamepad"></i> FORCE NEXT RESULT</h2>
+        <p>Set which color will win in the next round:</p>
+        <div class="stat-grid">
+            <div class="stat-item" style="color:var(--danger)">Red<br>₹<span id="bet-red">0</span></div>
+            <div class="stat-item" style="color:var(--success)">Green<br>₹<span id="bet-green">0</span></div>
+            <div class="stat-item" style="color:var(--violet)">Violet<br>₹<span id="bet-violet">0</span></div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-red btn-full" onclick="setResult('Red')">SET RED</button>
+            <button class="btn btn-green btn-full" onclick="setResult('Green')">SET GREEN</button>
+            <button class="btn btn-violet btn-full" onclick="setResult('Violet')">SET VIOLET</button>
+        </div>
+        <p id="log-msg" style="color:var(--accent); text-align:center; font-weight:bold;"></p>
+    </div>
+
+    <div class="card">
+        <h2><i class="fas fa-wallet"></i> QUICK RECHARGE</h2>
+        <input type="text" id="quick-phone" placeholder="Enter User Phone Number">
+        <input type="number" id="quick-amount" placeholder="Amount to Add/Deduct">
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn-green btn-full" onclick="updateMoney('add')">ADD MONEY</button>
+            <button class="btn btn-red btn-full" onclick="updateMoney('sub')">DEDUCT</button>
+        </div>
+    </div>
+
+    <div class="card" style="grid-column: span 2;">
+        <h2><i class="fas fa-users"></i> REGISTERED USERS LIST</h2>
+        <input type="text" id="search-bar" placeholder="Search by Phone Number..." onkeyup="searchUsers()">
+        <div class="user-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Phone/ID</th>
+                        <th>Password</th>
+                        <th>Wallet Balance</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="user-rows">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // --- YOUR FIREBASE CONFIGURATION ---
+    const firebaseConfig = {
+      apiKey: "PASTE_YOUR_ORIGINAL_API_KEY_HERE", 
+      authDomain: "g77-game.firebaseapp.com",
+      databaseURL: "https://g77-game-default-rtdb.firebaseio.com",
+      projectId: "g77-game",
+      storageBucket: "g77-game.appspot.com",
+      messagingSenderId: "107772658149",
+      appId: "1:107772658149:web:9b9399b1886888c3f4e3f1"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // 1. Fetch & Display Users
+    function syncUsers() {
+        db.ref('users').on('value', (snap) => {
+            const data = snap.val();
+            let rows = "";
+            for(let id in data) {
+                rows += `<tr>
+                    <td><b>${id}</b></td>
+                    <td>${data[id].password || '***'}</td>
+                    <td style="color:var(--success)">₹${data[id].balance || data[id].wallet || 0}</td>
+                    <td><button class="btn btn-red" style="padding:5px 10px" onclick="deleteUser('${id}')">Block</button></td>
+                </tr>`;
+            }
+            document.getElementById('user-rows').innerHTML = rows;
+        });
+    }
+
+    // 2. Set Game Result
+    function setResult(color) {
+        db.ref('game_control').update({
+            next_win: color,
+            manual_mode: true
+        }).then(() => {
+            document.getElementById('log-msg').innerText = "Result forced to " + color;
+            setTimeout(() => { document.getElementById('log-msg').innerText = ""; }, 3000);
+        });
+    }
+
+    // 3. Update Balance
+    function updateMoney(type) {
+        const phone = document.getElementById('quick-phone').value;
+        const amount = parseInt(document.getElementById('quick-amount').value);
+        if(!phone || !amount) return alert("Fill all info");
+
+        const ref = db.ref('users/' + phone + '/balance');
+        ref.once('value').then(s => {
+            let current = s.val() || 0;
+            let final = (type === 'add') ? current + amount : current - amount;
+            ref.set(final).then(() => alert("Wallet Updated!"));
+        });
+    }
+
+    // 4. Live Bet Monitor
+    db.ref('current_bets').on('value', snap => {
+        let r=0, g=0, v=0;
+        snap.forEach(child => {
+            let bet = child.val();
+            if(bet.color === 'Red') r += parseInt(bet.amount);
+            if(bet.color === 'Green') g += parseInt(bet.amount);
+            if(bet.color === 'Violet') v += parseInt(bet.amount);
+        });
+        document.getElementById('bet-red').innerText = r;
+        document.getElementById('bet-green').innerText = g;
+        document.getElementById('bet-violet').innerText = v;
+    });
+
+    // 5. Search Function
+    function searchUsers() {
+        let val = document.getElementById('search-bar').value.toLowerCase();
+        let rows = document.getElementById('user-rows').getElementsByTagName('tr');
+        for(let i=0; i<rows.length; i++) {
+            let phone = rows[i].getElementsByTagName('td')[0].innerText.toLowerCase();
+            rows[i].style.display = phone.includes(val) ? "" : "none";
+        }
+    }
+
+    syncUsers();
+</script>
+
+</body>
+</html>
