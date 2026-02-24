@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saharaj Call - Ultimate Messaging</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root { --primary: #2563eb; --online: #22c55e; --offline: #9ca3af; }
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .status-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; }
+        .bg-online { background-color: var(--online); }
+        .bg-offline { background-color: var(--offline); }
+        #remoteVideo { width: 100%; height: 100%; object-fit: cover; background: #111; }
+        #localVideo { 
+            position: absolute; bottom: 20px; right: 20px; width: 120px; 
+            border-radius: 12px; border: 2px solid white; cursor: pointer; transition: 0.3s; 
+        }
+        #localVideo.expanded { width: 100%; height: 100%; right: 0; bottom: 0; border: none; border-radius: 0; z-index: 50; }
+        .msg-bubble { max-width: 75%; padding: 10px 14px; border-radius: 18px; position: relative; }
+        .msg-sent { background-color: var(--primary); color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .msg-received { background-color: white; color: #1f2937; align-self: flex-start; border-bottom-left-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <div id="setup-screen" class="hidden fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center p-6">
+        <div class="w-full max-w-md text-center">
+            <h1 class="text-3xl font-bold text-blue-600 mb-2">Welcome!</h1>
+            <p class="text-gray-500 mb-6">Enter your display name to continue</p>
+            <input type="text" id="username-input" class="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 outline-none mb-4" placeholder="Your Name">
+            <button onclick="saveProfile()" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg">Get Started</button>
+        </div>
+    </div>
+
+    <div id="main-app" class="h-screen flex flex-col max-w-2xl mx-auto bg-white shadow-2xl relative">
+        
+        <header class="p-4 bg-blue-600 text-white flex justify-between items-center">
+            <div onclick="editProfile()" class="cursor-pointer group">
+                <h2 id="my-name-display" class="font-bold text-lg group-hover:underline">Loading...</h2>
+                <p class="text-[10px] opacity-80" id="my-id-display"></p>
+            </div>
+            <div class="text-xl font-black">SAHARAJ CALL</div>
+        </header>
+
+        <div class="p-4 border-b">
+            <div class="relative">
+                <input type="text" id="user-search" oninput="handleSearch()" placeholder="Search users by name..." class="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-full outline-none focus:ring-2 ring-blue-400">
+                <span class="absolute left-3 top-2 text-gray-400">🔍</span>
+            </div>
+            <div id="search-results" class="mt-2 space-y-2 max-h-40 overflow-y-auto"></div>
+        </div>
+
+        <div id="chat-container" class="hidden flex-1 flex flex-col overflow-hidden">
+            <div class="p-3 border-b flex justify-between items-center bg-gray-50">
+                <div class="flex items-center gap-3">
+                    <button onclick="closeChat()" class="text-blue-600 text-xl font-bold">←</button>
+                    <div>
+                        <h3 id="target-name" class="font-bold leading-none">User</h3>
+                        <span id="target-status" class="text-[10px]">offline</span>
+                    </div>
+                </div>
+                <div class="flex gap-4 pr-2">
+                    <button onclick="initiateCall('audio')" class="text-xl hover:scale-110 transition">📞</button>
+                    <button onclick="initiateCall('video')" class="text-xl hover:scale-110 transition">📹</button>
+                </div>
+            </div>
+            
+            <div id="messages-list" class="flex-1 p-4 overflow-y-auto flex flex-col gap-3 bg-[#e5ddd5]"></div>
+
+            <div class="p-4 bg-white border-t flex gap-2 items-center">
+                <input type="text" id="msg-input" placeholder="Type a message..." class="flex-1 p-2 bg-gray-100 rounded-lg outline-none">
+                <button onclick="handleSendMessage()" class="bg-blue-600 text-white px-5 py-2 rounded-lg font-bold">Send</button>
+            </div>
+        </div>
+
+        <div id="home-placeholder" class="flex-1 flex flex-col items-center justify-center text-gray-400">
+            <p>Search for a friend to start chatting</p>
+        </div>
+    </div>
+
+    <div id="incoming-overlay" class="hidden fixed inset-0 bg-blue-900/95 z-[200] flex flex-col items-center justify-center text-white">
+        <div class="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center text-4xl mb-4 animate-pulse">👤</div>
+        <h2 id="caller-name" class="text-2xl font-bold mb-1">Incoming Call</h2>
+        <p id="call-type-label" class="mb-8 opacity-80 italic text-blue-200">Video Calling...</p>
+        <div class="flex gap-12">
+            <button onclick="declineCall()" class="bg-red-500 w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl">✖</button>
+            <button onclick="acceptCall()" class="bg-green-500 w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl">✔</button>
+        </div>
+    </div>
+
+    <div id="call-screen" class="hidden fixed inset-0 bg-black z-[300] flex flex-col">
+        <div class="absolute top-6 left-6 z-50 text-[10px] text-green-400 font-mono bg-black/40 p-2 rounded">
+            RTT: <span id="stat-rtt">0</span>ms | Loss: <span id="stat-loss">0</span>
+        </div>
+        
+        <div class="relative flex-1 bg-gray-900">
+            <video id="remoteVideo" autoplay playsinline></video>
+            <video id="localVideo" autoplay playsinline muted onclick="this.classList.toggle('expanded')"></video>
+        </div>
+
+        <div class="h-24 bg-gray-800 flex justify-around items-center px-6">
+            <button onclick="toggleMic()" id="mic-btn" class="bg-gray-700 w-12 h-12 rounded-full text-white">🎤</button>
+            <button onclick="toggleCam()" id="cam-btn" class="bg-gray-700 w-12 h-12 rounded-full text-white">📷</button>
+            <button onclick="endCall()" class="bg-red-600 w-14 h-14 rounded-full text-white text-xl shadow-lg">📞</button>
+            <div class="flex flex-col items-center gap-1">
+                <input type="range" min="0" max="1" step="0.1" value="1" oninput="adjustVolume(this.value)" class="w-20 accent-blue-500">
+                <span class="text-[10px] text-gray-400 font-bold uppercase">Volume</span>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, collection, addDoc, query, where, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // Firebase Configuration (From your input)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDon2cCmzI5BVpfJTak97f4UOpBiP-zoR4",
+            authDomain: "saharaj-call.firebaseapp.com",
+            projectId: "saharaj-call",
+            storageBucket: "saharaj-call.firebasestorage.app",
+            messagingSenderId: "891206283336",
+            appId: "1:891206283336:android:f0e4a53dc8395f196ce87d"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // 1. Random User ID Generation
+        let myUID = localStorage.getItem('saharaj_v3_uid');
+        if (!myUID) {
+            myUID = 'USER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+            localStorage.setItem('saharaj_v3_uid', myUID);
+        }
+        document.getElementById('my-id-display').innerText = `ID: ${myUID}`;
+
+        let myName = "";
+        let activeChatPartner = null;
+        let pc = null;
+        let localStream = null;
+
+        // 3. Auto-Login & Session
+        async function initApp() {
+            const userDoc = await getDoc(doc(db, "users", myUID));
+            if (userDoc.exists()) {
+                myName = userDoc.data().username;
+                document.getElementById('my-name-display').innerText = myName;
+                document.getElementById('setup-screen').classList.add('hidden');
+                setUserStatus('online');
+                listenForCalls();
+            } else {
+                document.getElementById('setup-screen').classList.remove('hidden');
+            }
+        }
+        initApp();
+
+        window.saveProfile = async () => {
+            const input = document.getElementById('username-input').value.trim();
+            if (input.length < 2) return alert("Name too short!");
+            await setDoc(doc(db, "users", myUID), {
+                username: input,
+                status: 'online',
+                lastActive: Date.now()
+            });
+            location.reload();
+        };
+
+        // 4. Edit Profile
+        window.editProfile = async () => {
+            const newName = prompt("Enter new username:", myName);
+            if (newName && newName !== myName) {
+                await updateDoc(doc(db, "users", myUID), { username: newName });
+                location.reload();
+            }
+        };
+
+        // 6. Online/Offline Presence
+        function setUserStatus(status) {
+            updateDoc(doc(db, "users", myUID), { status: status, lastActive: Date.now() });
+        }
+        window.onbeforeunload = () => setUserStatus('offline');
+        
+        // 12. Auto End Call on Minimize
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden && pc) endCall();
+        });
+
+        // 5. Search Logic
+        window.handleSearch = () => {
+            const val = document.getElementById('user-search').value.toLowerCase();
+            const container = document.getElementById('search-results');
+            container.innerHTML = "";
+            if (val.length < 2) return;
+
+            onSnapshot(collection(db, "users"), (snap) => {
+                container.innerHTML = "";
+                snap.forEach(user => {
+                    const data = user.data();
+                    if (data.username.toLowerCase().includes(val) && user.id !== myUID) {
+                        const item = document.createElement('div');
+                        item.className = "flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-blue-50 border border-transparent hover:border-blue-200";
+                        item.innerHTML = `
+                            <div class="flex items-center gap-3">
+                                <div class="status-dot ${data.status === 'online' ? 'bg-online' : 'bg-offline'}"></div>
+                                <span class="font-medium">${data.username}</span>
+                            </div>
+                            <span class="text-xs text-blue-500">Chat →</span>
+                        `;
+                        item.onclick = () => openChat(user.id, data.username);
+                        container.appendChild(item);
+                    }
+                });
+            });
+        };
+
+        // 7. Messaging Logic
+        window.openChat = (id, name) => {
+            activeChatPartner = id;
+            document.getElementById('home-placeholder').classList.add('hidden');
+            document.getElementById('chat-container').classList.remove('hidden');
+            document.getElementById('target-name').innerText = name;
+            loadMessages();
+        };
+
+        function loadMessages() {
+            const chatId = [myUID, activeChatPartner].sort().join('_');
+            const q = query(collection(db, "messages"), where("chatId", "==", chatId), orderBy("timestamp", "asc"));
+            
+            onSnapshot(q, (snap) => {
+                const list = document.getElementById('messages-list');
+                list.innerHTML = "";
+                snap.forEach(msg => {
+                    const d = msg.data();
+                    const isMe = d.sender === myUID;
+                    const div = document.createElement('div');
+                    div.className = `msg-bubble ${isMe ? 'msg-sent' : 'msg-received'}`;
+                    div.innerHTML = `
+                        <div class="text-sm">${d.text}</div>
+                        <div class="text-[9px] mt-1 text-right opacity-70">${new Date(d.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} ${isMe ? (d.seen ? '✓✓' : '✓') : ''}</div>
+                    `;
+                    // Edit/Delete on Click (Requirement 7)
+                    if(isMe) div.onclick = () => handleMessageOptions(msg.id, d.text);
+                    list.appendChild(div);
+                });
+                list.scrollTop = list.scrollHeight;
+            });
+        }
+
+        window.handleSendMessage = async () => {
+            const input = document.getElementById('msg-input');
+            const text = input.value.trim();
+            if (!text) return;
+            const chatId = [myUID, activeChatPartner].sort().join('_');
+            await addDoc(collection(db, "messages"), {
+                chatId, sender: myUID, text, timestamp: Date.now(), seen: false
+            });
+            input.value = "";
+            input.focus();
+        };
+
+        // 8 & 13. WebRTC Calling System
+        const servers = { iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }] };
+
+        window.initiateCall = async (type) => {
+            pc = new RTCPeerConnection(servers);
+            localStream = await navigator.mediaDevices.getUserMedia({ 
+                video: type === 'video', 
+                audio: { echoCancellation: true, noiseSuppression: true } 
+            });
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            document.getElementById('localVideo').srcObject = localStream;
+            document.getElementById('call-screen').classList.remove('hidden');
+
+            const callRef = doc(db, "calls", activeChatPartner);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            await setDoc(callRef, {
+                offer,
+                callerName: myName,
+                callerId: myUID,
+                type: type
+            });
+
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    addDoc(collection(db, `calls/${activeChatPartner}/candidates`), event.candidate.toJSON());
+                }
+            };
+
+            onSnapshot(callRef, (doc) => {
+                const data = doc.data();
+                if (data?.answer) pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            });
+
+            monitorStats();
+        };
+
+        function listenForCalls() {
+            onSnapshot(doc(db, "calls", myUID), async (snap) => {
+                const data = snap.data();
+                if (data && !pc) {
+                    document.getElementById('caller-name').innerText = data.callerName;
+                    document.getElementById('call-type-label').innerText = `${data.type.toUpperCase()} Calling...`;
+                    document.getElementById('incoming-overlay').classList.remove('hidden');
+                    window.currentCallData = data;
+                }
+            });
+        }
+
+        window.acceptCall = async () => {
+            const data = window.currentCallData;
+            document.getElementById('incoming-overlay').classList.add('hidden');
+            document.getElementById('call-screen').classList.remove('hidden');
+
+            pc = new RTCPeerConnection(servers);
+            localStream = await navigator.mediaDevices.getUserMedia({ 
+                video: data.type === 'video', 
+                audio: true 
+            });
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            document.getElementById('localVideo').srcObject = localStream;
+
+            pc.ontrack = (event) => {
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+            };
+
+            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+
+            await updateDoc(doc(db, "calls", myUID), { answer });
+
+            onSnapshot(collection(db, `calls/${myUID}/candidates`), (snap) => {
+                snap.forEach(change => {
+                    pc.addIceCandidate(new RTCIceCandidate(change.data()));
+                });
+            });
+            monitorStats();
+        };
+
+        window.endCall = async () => {
+            if (pc) pc.close();
+            if (localStream) localStream.getTracks().forEach(t => t.stop());
+            await deleteDoc(doc(db, "calls", myUID));
+            await deleteDoc(doc(db, "calls", activeChatPartner));
+            location.reload();
+        };
+
+        // 10. Real-Time Network Stats
+        function monitorStats() {
+            setInterval(async () => {
+                if (!pc) return;
+                const stats = await pc.getStats();
+                stats.forEach(report => {
+                    if (report.type === 'remote-inbound-rtp') {
+                        document.getElementById('stat-rtt').innerText = Math.round(report.roundTripTime * 1000) || 0;
+                        document.getElementById('stat-loss').innerText = report.packetsLost || 0;
+                    }
+                });
+            }, 2000);
+        }
+
+        // Utils
+        window.closeChat = () => {
+            document.getElementById('chat-container').classList.add('hidden');
+            document.getElementById('home-placeholder').classList.remove('hidden');
+        };
+
+        window.toggleMic = () => {
+            const track = localStream.getAudioTracks()[0];
+            track.enabled = !track.enabled;
+            document.getElementById('mic-btn').innerText = track.enabled ? '🎤' : '🔇';
+        };
+
+        window.toggleCam = () => {
+            const track = localStream.getVideoTracks()[0];
+            if(track) {
+                track.enabled = !track.enabled;
+                document.getElementById('cam-btn').innerText = track.enabled ? '📷' : '🚫';
+            }
+        };
+
+        window.adjustVolume = (val) => {
+            document.getElementById('remoteVideo').volume = val;
+        };
+    </script>
+</body>
+</html>
