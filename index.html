@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saharaj Call - Official</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #2b2e33;
+            --accent-green: #3ce09d;
+            --danger-red: #ff5252;
+            --card-glass: rgba(255, 255, 255, 0.08);
+            --text-white: #ffffff;
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            background: var(--bg-color);
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            color: var(--text-white);
+            height: 100%; overflow: hidden;
+        }
+
+        /* Setup / Welcome Screen */
+        #setup-modal {
+            position: fixed; inset: 0;
+            background: radial-gradient(circle at center, #3a3f45, #121212);
+            z-index: 2000; display: flex; justify-content: center; align-items: center;
+        }
+
+        .welcome-card {
+            background: var(--card-glass); backdrop-filter: blur(20px);
+            padding: 40px; border-radius: 40px; text-align: center;
+            width: 85%; max-width: 400px; border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .uid-pill {
+            background: var(--accent-green); color: #000;
+            padding: 6px 18px; border-radius: 12px; font-weight: bold;
+            display: inline-block; margin: 15px 0; font-size: 14px;
+        }
+
+        .input-field {
+            width: 100%; padding: 15px; background: rgba(0,0,0,0.3);
+            border: 1px solid #444; border-radius: 15px; color: #fff;
+            text-align: center; margin-bottom: 20px; box-sizing: border-box;
+        }
+
+        .btn-enter {
+            background: var(--accent-green); border: none; padding: 15px;
+            width: 100%; border-radius: 15px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 10px 20px rgba(60, 224, 157, 0.2);
+        }
+
+        /* Home Screen */
+        #home-screen { padding: 25px; height: 100vh; display: flex; flex-direction: column; }
+        
+        .top-status { display: flex; justify-content: space-between; align-items: center; }
+
+        .ping-chip {
+            border: 1px solid var(--accent-green); color: var(--accent-green);
+            padding: 5px 12px; border-radius: 10px; font-size: 12px;
+            background: rgba(60, 224, 157, 0.1);
+        }
+
+        .search-container {
+            margin: 20px 0; position: relative;
+        }
+
+        .search-container input {
+            width: 100%; padding: 12px 45px; background: var(--card-glass);
+            border: none; border-radius: 15px; color: #fff; box-sizing: border-box;
+        }
+
+        /* User List Items */
+        .user-list { flex: 1; overflow-y: auto; }
+        .user-card {
+            background: var(--card-glass); padding: 20px; border-radius: 25px;
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .user-info b { font-size: 17px; display: block; }
+        .user-info span { font-size: 12px; color: var(--accent-green); }
+
+        .btn-call-action {
+            background: var(--accent-green); width: 45px; height: 45px;
+            border-radius: 15px; border: none; font-size: 20px; cursor: pointer;
+        }
+
+        /* Real-Time Call Screen (Matched to Photo) */
+        #call-screen {
+            position: fixed; inset: 0; background: #000; z-index: 1000;
+            display: none; flex-direction: column;
+        }
+
+        #remoteVideo { width: 100%; height: 100%; object-fit: cover; }
+        
+        #localVideo {
+            position: absolute; top: 120px; right: 20px;
+            width: 110px; height: 150px; border-radius: 25px;
+            border: 2px solid var(--accent-green); object-fit: cover;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .caller-header {
+            position: absolute; top: 40px; left: 20px; right: 20px;
+            background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(15px);
+            padding: 15px 20px; border-radius: 25px; display: flex;
+            justify-content: space-between; align-items: center;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .call-footer-controls {
+            position: absolute; bottom: 30px; width: 100%;
+            display: flex; flex-direction: column; align-items: center; gap: 15px;
+        }
+
+        .round-btns-row { display: flex; gap: 15px; }
+
+        .round-btn {
+            width: 55px; height: 55px; border-radius: 50%;
+            background: rgba(255,255,255,0.15); border: none;
+            color: #fff; font-size: 22px; cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        .active-btn { background: var(--accent-green); color: #000; }
+
+        .btn-hangup-long {
+            background: var(--danger-red); width: 160px; height: 55px;
+            border-radius: 30px; border: none; color: #fff;
+            font-weight: bold; font-size: 16px; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="setup-modal">
+        <div class="welcome-card">
+            <h2 style="margin:0">Welcome!</h2>
+            <p>Your unique ID is generated</p>
+            <div class="uid-pill" id="my-uid-label">UID: ...</div>
+            <input type="text" id="name-field" class="input-field" placeholder="What's your name?">
+            <button class="btn-enter" onclick="confirmProfile()">Save & Enter</button>
+        </div>
+    </div>
+
+    <div id="home-screen">
+        <div class="top-status">
+            <div class="ping-chip">Your Ping: <span id="ping-text">0</span> ms</div>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="search-input" placeholder="Find users..." onkeyup="searchFilter()">
+        </div>
+
+        <div class="user-list" id="user-display">
+            </div>
+    </div>
+
+    <div id="call-screen">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <video id="localVideo" autoplay playsinline muted></video>
+
+        <div class="caller-header">
+            <div>
+                <b id="target-name">User Name</b><br>
+                <small id="target-uid" style="opacity:0.6">UID: ...</small>
+            </div>
+            <div class="ping-chip">● <span id="you-ping">0</span> ms</div>
+        </div>
+
+        <div class="call-footer-controls">
+            <div class="round-btns-row">
+                <button class="round-btn" onclick="muteAudio()">🎙️</button>
+                <button class="round-btn" onclick="stopVideo()">📹</button>
+                <button class="round-btn" onclick="switchCam()">🔄</button>
+                <button class="round-btn active-btn">📷</button>
+            </div>
+            <button class="btn-hangup-long" onclick="endCurrentCall()">End Call</button>
+        </div>
+    </div>
+
+    <script>
+        // --- YOUR FIREBASE CONFIG ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDon2cCmzI5BVpfJTak97f4UOpBiP-zoR4",
+            projectId: "saharaj-call",
+            databaseURL: "https://saharaj-call-default-rtdb.firebaseio.com",
+            storageBucket: "saharaj-call.firebasestorage.app"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let myID = localStorage.getItem('saharaj_uid') || 'ID-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+        let myName = localStorage.getItem('saharaj_name');
+        let myStream;
+        let pConn;
+        let activeTarget = null;
+
+        document.getElementById('my-uid-label').innerText = "UID: " + myID;
+
+        if(myName) {
+            document.getElementById('setup-modal').style.display = 'none';
+            launch();
+        }
+
+        function confirmProfile() {
+            const nameIn = document.getElementById('name-field').value;
+            if(!nameIn) return alert("Please enter your name");
+            myName = nameIn;
+            localStorage.setItem('saharaj_uid', myID);
+            localStorage.setItem('saharaj_name', myName);
+            document.getElementById('setup-modal').style.display = 'none';
+            launch();
+        }
+
+        async function launch() {
+            try {
+                myStream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+                document.getElementById('localVideo').srcObject = myStream;
+            } catch(e) { console.error("Media Access Denied"); }
+
+            // Sync Network & Presence
+            setInterval(() => {
+                let start = Date.now();
+                db.ref('.info/connected').once('value', () => {
+                    let p = Date.now() - start;
+                    document.getElementById('ping-text').innerText = p;
+                    db.ref('active_users/' + myID).set({name: myName, uid: myID, ping: p, lastSeen: Date.now()});
+                });
+            }, 3000);
+
+            // Listen for Hardware Button (Headset)
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.setActionHandler('hangup', () => endCurrentCall());
+            }
+
+            // Incoming Call Listener
+            db.ref('signaling/' + myID).on('value', async snap => {
+                const data = snap.val();
+                if(data && data.type === 'offer' && !activeTarget) {
+                    if(confirm("Call from " + data.fromName + "?")) joinCall(data);
+                } else if (!data && activeTarget) endCurrentCall();
+            });
+
+            refreshList();
+        }
+
+        function refreshList() {
+            db.ref('active_users').on('value', snap => {
+                const listDiv = document.getElementById('user-display');
+                listDiv.innerHTML = "";
+                snap.forEach(child => {
+                    const u = child.val();
+                    if(u.uid !== myID && (Date.now() - u.lastSeen < 10000)) {
+                        listDiv.innerHTML += `
+                            <div class="user-card">
+                                <div class="user-info">
+                                    <b>${u.name}</b>
+                                    <span>● ${u.ping}ms • Online</span>
+                                </div>
+                                <button class="btn-call-action" onclick="startCall('${u.uid}', '${u.name}')">📞</button>
+                            </div>
+                        `;
+                    }
+                });
+            });
+        }
+
+        async function startCall(target, tName) {
+            activeTarget = target;
+            document.getElementById('call-screen').style.display = 'flex';
+            document.getElementById('target-name').innerText = tName;
+            document.getElementById('target-uid').innerText = "UID: " + target;
+
+            pConn = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            myStream.getTracks().forEach(t => pConn.addTrack(t, myStream));
+            pConn.ontrack = e => document.getElementById('remoteVideo').srcObject = e.streams[0];
+
+            const off = await pConn.createOffer();
+            await pConn.setLocalDescription(off);
+            db.ref('signaling/' + target).set({type: 'offer', offer: off, from: myID, fromName: myName});
+
+            db.ref('signaling/' + myID + '/answer').on('value', async s => {
+                const a = s.val();
+                if(a) await pConn.setRemoteDescription(new RTCSessionDescription(a));
+            });
+        }
+
+        async function joinCall(data) {
+            activeTarget = data.from;
+            document.getElementById('call-screen').style.display = 'flex';
+            pConn = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            myStream.getTracks().forEach(t => pConn.addTrack(t, myStream));
+            pConn.ontrack = e => document.getElementById('remoteVideo').srcObject = e.streams[0];
+
+            await pConn.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const ans = await pConn.createAnswer();
+            await pConn.setLocalDescription(ans);
+            db.ref('signaling/' + data.from + '/answer').set(ans);
+        }
+
+        function endCurrentCall() {
+            if(activeTarget) {
+                db.ref('signaling/' + activeTarget).remove();
+                db.ref('signaling/' + myID).remove();
+            }
+            if(pConn) pConn.close();
+            document.getElementById('call-screen').style.display = 'none';
+            activeTarget = null;
+        }
+
+        // Feature Controls
+        function muteAudio() { myStream.getAudioTracks()[0].enabled = !myStream.getAudioTracks()[0].enabled; }
+        function stopVideo() { myStream.getVideoTracks()[0].enabled = !myStream.getVideoTracks()[0].enabled; }
+        function switchCam() { alert("Switching Camera..."); }
+        function searchFilter() {
+            let q = document.getElementById('search-input').value.toLowerCase();
+            document.querySelectorAll('.user-card').forEach(c => {
+                c.style.display = c.innerText.toLowerCase().includes(q) ? 'flex' : 'none';
+            });
+        }
+    </script>
+</body>
+</html>
