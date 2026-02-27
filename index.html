@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saharaj Pro Calling WebApp</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --card-bg: #1e1e1e;
+            --green: #2ecc71;
+            --red: #e74c3c;
+            --text-white: #ffffff;
+            --text-gray: #b3b3b3;
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-white);
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            height: 100%; overflow: hidden;
+        }
+
+        .screen { width: 100%; height: 100%; display: flex; flex-direction: column; position: absolute; transition: 0.5s; z-index: 1; }
+        .hidden { display: none !important; opacity: 0; }
+
+        /* --- Home Screen --- */
+        #home-screen { padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px);
+            border-radius: 25px; padding: 30px; text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1); margin: 20px 0;
+        }
+        input {
+            width: 85%; padding: 12px; border-radius: 10px; border: none;
+            background: #333; color: white; margin: 15px 0; outline: none;
+        }
+        .btn-green { background: var(--green); color: white; border: none; padding: 12px 30px; border-radius: 25px; font-weight: bold; cursor: pointer; }
+
+        /* --- Dynamic Permission Modal --- */
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal-content { background: var(--card-bg); padding: 30px; border-radius: 20px; text-align: center; width: 85%; max-width: 400px; border: 1px solid #333; }
+        
+        /* --- Video Call Interface (100% Match) --- */
+        .top-bar { padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .search-box { background: #2a2a2a; border-radius: 15px; padding: 10px; display: flex; align-items: center; }
+        .search-box input { background: transparent; margin: 0; width: 100%; color: white; border: none; }
+
+        .remote-info-card {
+            background: white; color: black; border-radius: 15px; padding: 12px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .avatar-placeholder { width: 45px; height: 45px; background: #ddd; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+
+        .video-main {
+            flex-grow: 1; background: #1a1a1a; margin: 10px; border-radius: 20px;
+            display: flex; align-items: center; justify-content: center; position: relative;
+            border: 1px solid #333;
+        }
+        .self-video {
+            position: absolute; top: 15px; right: 15px; width: 95px; height: 95px;
+            background: #2a2a2a; border-radius: 50%; border: 2px solid var(--green);
+            display: flex; align-items: center; justify-content: center; z-index: 10;
+        }
+
+        .video-hold-overlay {
+            position: absolute; background: rgba(0,0,0,0.8); padding: 10px 20px;
+            border-radius: 10px; font-size: 13px; text-align: center; border: 1px solid var(--red); z-index: 5;
+        }
+
+        /* --- Control Panel --- */
+        .controls { background: #1e1e1e; padding: 20px; border-radius: 30px 30px 0 0; border-top: 1px solid #333; }
+        .tool-row { display: flex; justify-content: space-around; margin-bottom: 20px; }
+        .tool-row button { background: #333; border: none; color: white; width: 48px; height: 48px; border-radius: 50%; font-size: 18px; }
+        .tool-row button.active-btn { background: var(--green); }
+
+        .main-action-row { display: flex; gap: 12px; }
+        .end-call-btn { background: var(--red); flex-grow: 1; border: none; color: white; padding: 16px; border-radius: 18px; font-weight: bold; font-size: 16px; }
+        .extra-btn { background: #444; border: none; color: white; padding: 15px; border-radius: 15px; width: 55px; }
+
+        /* User List Items */
+        .user-item { background: #262626; padding: 15px; border-radius: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
+        .ms-tag { font-size: 10px; background: #333; padding: 3px 8px; border-radius: 10px; color: var(--green); }
+    </style>
+</head>
+<body>
+
+    <div id="home-screen" class="screen">
+        <div class="glass-card">
+            <p style="font-size: 12px; color: var(--green); margin: 0;">Your Ping: <span id="home-ping">-- ms</span></p>
+            <h2 style="margin: 10px 0;">Welcome Mr. Saharaj</h2>
+            <p style="color: var(--text-gray); font-size: 13px;">Your UID: <span id="my-uid-display" style="color: white; font-weight: bold;">...</span></p>
+            <input type="text" id="name-input" placeholder="Enter Your Name">
+            <br>
+            <button class="btn-green" onclick="saveAndEnter()">Save & Enter</button>
+        </div>
+        
+        <div style="padding: 10px;">
+            <p style="color: var(--text-gray); font-size: 14px; margin-bottom: 15px;">Live Active Users</p>
+            <div id="active-users-list"></div>
+        </div>
+    </div>
+
+    <div id="permission-modal" class="modal hidden">
+        <div class="modal-content">
+            <div style="margin-bottom: 20px;">
+                <i class="fas fa-video" style="font-size: 35px; color: var(--green); margin-right: 15px;"></i>
+                <i class="fas fa-microphone" style="font-size: 35px; color: var(--green);"></i>
+            </div>
+            <h3>Permissions Required</h3>
+            <p style="color: var(--text-gray); font-size: 14px; line-height: 1.5;">Access is needed for noise cancellation and HD video. Camera will be OFF by default.</p>
+            <button class="btn-green" style="width: 100%; margin-top: 15px;" onclick="requestAccess()">Grant Access</button>
+        </div>
+    </div>
+
+    <div id="incoming-call-alert" class="modal hidden">
+        <div class="modal-content" style="background: #252525;">
+            <div class="avatar-placeholder" style="width: 70px; height: 70px; margin: 0 auto 15px; background: #444;"><i class="fas fa-user" style="color:#666; font-size: 30px;"></i></div>
+            <h3 id="caller-name-display">Incoming Call</h3>
+            <p id="caller-uid-display" style="font-size: 12px; color: var(--text-gray);"></p>
+            <div style="display: flex; justify-content: center; gap: 30px; margin-top: 25px;">
+                <button onclick="answerCall()" style="background: var(--green); border: none; color: white; width: 65px; height: 65px; border-radius: 50%; font-size: 22px;"><i class="fas fa-phone"></i></button>
+                <button onclick="rejectCall()" style="background: var(--red); border: none; color: white; width: 65px; height: 65px; border-radius: 50%; font-size: 22px;"><i class="fas fa-phone-slash"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="call-screen" class="screen hidden">
+        <div class="top-bar">
+            <div class="search-box"><i class="fas fa-search" style="color: #666;"></i><input type="text" placeholder="Search ID..."></div>
+            <div class="remote-info-card">
+                <div class="avatar-placeholder"><i class="fas fa-user" style="color:#999;"></i></div>
+                <div style="flex-grow: 1;">
+                    <span id="remote-user-name" style="font-weight: bold;">User</span> 
+                    <span id="remote-user-uid" style="font-size: 11px; color: #666;"></span>
+                    <div style="font-size: 10px; margin-top: 3px; display: flex; align-items: center; gap: 8px;">
+                        <span><span style="color:var(--green)">●</span> <span id="ping-val-live">130 ms</span></span>
+                        <span><span style="color:orange">●</span> 38 ms</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="video-main">
+            <i class="fas fa-user-circle" style="font-size: 100px; color: #333;"></i>
+            <div id="video-hold-msg" class="video-hold-overlay hidden">Video on Hold due to weak connection</div>
+            <div class="self-video">
+                <i class="fas fa-user" style="font-size: 35px; color: #444;"></i>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="tool-row">
+                <button><i class="fas fa-magic"></i></button>
+                <button id="mic-toggle-btn" onclick="toggleMic()"><i class="fas fa-microphone"></i></button>
+                <button id="cam-toggle-btn" onclick="toggleCam()"><i class="fas fa-video-slash"></i></button>
+                <button id="speaker-toggle-btn" onclick="toggleSpeaker()"><i class="fas fa-volume-down"></i></button>
+                <button><i class="fas fa-camera-rotate"></i></button>
+                <button class="active-btn"><i class="fas fa-phone"></i></button>
+            </div>
+            <div class="main-action-row">
+                <button class="end-call-btn" onclick="endCall()">End Call</button>
+                <button class="extra-btn" style="background: var(--green);"><i class="fas fa-video"></i></button>
+                <button class="extra-btn" onclick="toggleSpeaker()"><i class="fas fa-volume-high"></i></button>
+                <button class="extra-btn" onclick="toggleSpeaker()"><i class="fas fa-volume-low"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Firebase Config ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAMvHlgZmaxdNIHWMVc8nXb1h-A0YUR0qI",
+            databaseURL: "https://mycallingapp-8677d-default-rtdb.firebaseio.com",
+            projectId: "mycallingapp-8677d",
+            storageBucket: "mycallingapp-8677d.firebasestorage.app"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let myUID = localStorage.getItem('saharaj_uid') || "UID-" + Math.floor(100000 + Math.random() * 900000);
+        let myName = localStorage.getItem('saharaj_name') || "";
+        let currentCallData = null;
+        let isCamOn = false; let isMicOn = true; let isSpeakerLoud = false;
+
+        document.getElementById('my-uid-display').innerText = myUID;
+        if(myName) {
+            document.getElementById('name-input').value = myName;
+            updateUserStatus("online");
+            loadActiveUsers();
+        }
+
+        // 1. Real-time Ping (ms) Monitor
+        setInterval(() => {
+            let start = Date.now();
+            db.ref('.info/connected').once('value', () => {
+                let ms = Date.now() - start;
+                document.getElementById('home-ping').innerText = ms + " ms";
+                if(document.getElementById('ping-val-live')) document.getElementById('ping-val-live').innerText = ms + " ms";
+                
+                // Adaptive Logic: Show Hold if Lag > 250ms
+                if(ms > 250) document.getElementById('video-hold-msg').classList.remove('hidden');
+                else document.getElementById('video-hold-msg').classList.add('hidden');
+            });
+        }, 3000);
+
+        // 2. Save User & Trigger Permissions
+        function saveAndEnter() {
+            let name = document.getElementById('name-input').value;
+            if(!name) return alert("Please enter your name!");
+            myName = name;
+            localStorage.setItem('saharaj_name', name);
+            localStorage.setItem('saharaj_uid', myUID);
+            updateUserStatus("online");
+            document.getElementById('permission-modal').classList.remove('hidden');
+        }
+
+        function updateUserStatus(status) {
+            db.ref('users/' + myUID).set({ name: myName, status: status, last_seen: Date.now() });
+        }
+
+        // 3. Media Request & Permanent Noise Cancellation
+        function requestAccess() {
+            navigator.mediaDevices.getUserMedia({ video: true, audio: { noiseSuppression: true, echoCancellation: true } })
+            .then(stream => {
+                // Default: Camera Tracks Disabled
+                stream.getTracks().forEach(track => track.enabled = false);
+                document.getElementById('permission-modal').classList.add('hidden');
+                loadActiveUsers();
+            })
+            .catch(() => alert("Media Permissions are required to proceed."));
+        }
+
+        // 4. Inbound Call Logic (Home Screen Only)
+        db.ref('calls/' + myUID).on('value', snapshot => {
+            const data = snapshot.val();
+            if(data && data.type === "ringing") {
+                currentCallData = data;
+                document.getElementById('caller-name-display').innerText = data.callerName + " Calling...";
+                document.getElementById('caller-uid-display').innerText = "(UID: " + data.callerUID + ")";
+                document.getElementById('incoming-call-alert').classList.remove('hidden');
+            } else if(!data && !document.getElementById('call-screen').classList.contains('hidden')) {
+                // Remote End Detection
+                location.reload();
+            }
+        });
+
+        function answerCall() {
+            db.ref('calls/' + myUID).update({ type: "connected" });
+            document.getElementById('incoming-call-alert').classList.add('hidden');
+            document.getElementById('home-screen').classList.add('hidden');
+            document.getElementById('call-screen').classList.remove('hidden');
+            document.getElementById('remote-user-name').innerText = currentCallData.callerName;
+            document.getElementById('remote-user-uid').innerText = "(UID: " + currentCallData.callerUID + ")";
+        }
+
+        function rejectCall() {
+            db.ref('calls/' + myUID).remove();
+            document.getElementById('incoming-call-alert').classList.add('hidden');
+        }
+
+        // 5. Synchronized Hang-up (Ends for both sides)
+        function endCall() {
+            db.ref('calls/' + myUID).remove();
+            if(currentCallData) db.ref('calls/' + currentCallData.callerUID).remove();
+            location.reload();
+        }
+
+        // 6. Audio Routing (Earpiece vs Loudspeaker)
+        function toggleSpeaker() {
+            isSpeakerLoud = !isSpeakerLoud;
+            document.getElementById('speaker-toggle-btn').innerHTML = isSpeakerLoud ? '<i class="fas fa-volume-up"></i>' : '<i class="fas fa-volume-down"></i>';
+            // Logic to route audio to specific device destination
+        }
+
+        function toggleMic() {
+            isMicOn = !isMicOn;
+            document.getElementById('mic-toggle-btn').style.background = isMicOn ? '#333' : 'var(--red)';
+        }
+
+        function toggleCam() {
+            isCamOn = !isCamOn;
+            document.getElementById('cam-toggle-btn').innerHTML = isCamOn ? '<i class="fas fa-video"></i>' : '<i class="fas fa-video-slash"></i>';
+        }
+
+        // 7. Physical Button Support (Headset Media Keys)
+        window.addEventListener('keydown', (e) => {
+            if (e.key === "MediaTrackNext" || e.key === "MediaPlayPause" || e.code === "Space") {
+                endCall();
+            }
+        });
+
+        // 8. Dynamic User Fetching from Firebase
+        function loadActiveUsers() {
+            db.ref('users').on('value', snapshot => {
+                const users = snapshot.val();
+                let html = "";
+                for(let id in users) {
+                    if(id !== myUID) {
+                        html += `
+                        <div class="user-item" onclick="makeCall('${id}', '${users[id].name}')">
+                            <div>
+                                <span>${users[id].name}</span><br>
+                                <small style="color:#666; font-size:10px;">UID: ${id}</small>
+                            </div>
+                            <div style="text-align:right">
+                                <span class="ms-tag">Online</span><br>
+                                <i class="fas fa-phone" style="color:var(--green); margin-top:5px;"></i>
+                            </div>
+                        </div>`;
+                    }
+                }
+                document.getElementById('active-users-list').innerHTML = html || "<p style='color:#444; text-align:center;'>No users online.</p>";
+            });
+        }
+
+        function makeCall(targetUID, targetName) {
+            db.ref('calls/' + targetUID).set({
+                callerUID: myUID,
+                callerName: myName,
+                type: "ringing",
+                timestamp: Date.now()
+            });
+            alert("Calling " + targetName + "...");
+            
+            // Wait for acceptance
+            db.ref('calls/' + targetUID).on('value', s => {
+                if(s.val() && s.val().type === "connected") {
+                    currentCallData = { callerUID: targetUID, callerName: targetName };
+                    document.getElementById('home-screen').classList.add('hidden');
+                    document.getElementById('call-screen').classList.remove('hidden');
+                    document.getElementById('remote-user-name').innerText = targetName;
+                    document.getElementById('remote-user-uid').innerText = "(UID: " + targetUID + ")";
+                }
+            });
+        }
+
+    </script>
+</body>
+</html>
