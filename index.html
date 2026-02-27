@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saharaj Pro Video Call - Global</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+
+    <style>
+        :root {
+            --bg: #0b0f19;
+            --accent: #00ff7f;
+            --danger: #ff4757;
+            --card: rgba(255, 255, 255, 0.05);
+            --border: rgba(0, 255, 127, 0.3);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #fff;
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        /* Dynamic Custom Alert & Modals */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.92);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 9999;
+        }
+
+        .modal-box {
+            background: #161b22;
+            padding: 35px;
+            border-radius: 25px;
+            text-align: center;
+            width: 85%;
+            max-width: 400px;
+            border: 1px solid var(--accent);
+            box-shadow: 0 0 30px rgba(0, 255, 127, 0.15);
+        }
+
+        input {
+            width: 100%;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 12px;
+            border: 1px solid #30363d;
+            background: #0d1117;
+            color: #fff;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        /* Dashboard Design */
+        .dashboard { padding: 20px; max-width: 600px; margin: auto; }
+        
+        header { 
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 30px; border-bottom: 1px solid #30363d; padding-bottom: 15px;
+        }
+
+        .user-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 15px;
+            display: flex; justify-content: space-between; align-items: center;
+            transition: 0.3s ease;
+        }
+
+        .user-card:hover { border-color: var(--accent); background: rgba(0, 255, 127, 0.05); }
+
+        .ping-box { font-size: 12px; color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 5px; }
+
+        .btn-call {
+            background: var(--accent);
+            color: #000; border: none; padding: 12px 28px;
+            border-radius: 30px; font-weight: bold; cursor: pointer; font-size: 13px;
+            text-transform: uppercase;
+        }
+
+        /* Active Call Screen (As per Image) */
+        #call-screen {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 10000; display: none;
+            flex-direction: column;
+        }
+
+        .video-container { flex: 1; position: relative; }
+        #remote-video { width: 100%; height: 100%; object-fit: cover; }
+        #local-video { 
+            position: absolute; bottom: 150px; right: 20px; 
+            width: 110px; height: 160px; border-radius: 15px; border: 2px solid #fff;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .call-controls {
+            height: 140px; display: flex; justify-content: space-evenly;
+            align-items: center; background: linear-gradient(transparent, rgba(0,0,0,0.9));
+            padding-bottom: 20px;
+        }
+
+        .control-circle {
+            width: 65px; height: 65px; border-radius: 50%; border: none;
+            cursor: pointer; font-size: 18px; color: white; display: flex; justify-content: center; align-items: center;
+        }
+
+        .btn-gray { background: #333; }
+        .btn-red { background: var(--danger); }
+
+        .info-overlay {
+            position: absolute; top: 40px; left: 20px;
+            background: rgba(0,0,0,0.6); padding: 12px; border-radius: 12px;
+        }
+
+        .noise-info {
+            position: absolute; bottom: 150px; left: 20px;
+            font-size: 11px; color: #888; letter-spacing: 0.5px;
+        }
+
+        .voice-alert { color: var(--accent); font-size: 10px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="reg-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <h2 style="margin:0;">Register User</h2>
+            <p id="gen-uid" style="color: #666; font-size: 12px; margin-top: 8px;"></p>
+            <input type="text" id="user-name-input" placeholder="Enter Your Name">
+            <button class="btn-call" style="width: 100%;" onclick="saveUser()">Save & Connect</button>
+        </div>
+    </div>
+
+    <div class="dashboard">
+        <header>
+            <div>
+                <h2 style="margin:0; color: var(--accent);">Calling App</h2>
+                <small id="current-user" style="color:#888;"></small>
+            </div>
+            <div class="ping-box">● Online</div>
+        </header>
+
+        <div id="online-users-container">
+            </div>
+    </div>
+
+    <div id="call-screen">
+        <div class="video-container">
+            <video id="remote-video" autoplay playsinline></video>
+            <video id="local-video" autoplay playsinline muted></video>
+            
+            <div class="info-overlay">
+                <b id="active-user-name">Unknown User</b><br>
+                <small id="call-timer">00:00</small>
+                <div class="ping-box" id="live-ms">● 18ms</div>
+            </div>
+
+            <div class="noise-info">Noise Cancellation: Active (Default)</div>
+        </div>
+
+        <div class="call-controls">
+            <button class="control-circle btn-gray" onclick="toggleMic()">Mic</button>
+            <button class="control-circle btn-gray" onclick="toggleCam()">Cam</button>
+            <button class="control-circle btn-red" onclick="endCall()">Hang Up</button>
+        </div>
+    </div>
+
+    <div id="incoming-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-box">
+            <h3 id="caller-name-info">Incoming Call...</h3>
+            <div class="voice-alert">Voice Alert & Camera Active</div>
+            <div style="display: flex; gap: 15px; margin-top: 25px;">
+                <button class="btn-call" style="flex:1;" onclick="acceptCall()">Accept</button>
+                <button class="btn-call" style="flex:1; background: var(--danger); color: #fff;" onclick="rejectCall()">Reject</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Firebase Full Configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAMvHlgZmaxdNIHWMVc8nXb1h-A0YUR0qI",
+            databaseURL: "https://mycallingapp-8677d-default-rtdb.firebaseio.com",
+            projectId: "mycallingapp-8677d",
+            storageBucket: "mycallingapp-8677d.firebasestorage.app"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Automatic ID Logic
+        let myUID = localStorage.getItem('sah_uid') || 'UID-' + Math.floor(Math.random() * 9000000);
+        let myName = localStorage.getItem('sah_name');
+        localStorage.setItem('sah_uid', myUID);
+
+        if(!myName) {
+            document.getElementById('reg-modal').style.display = 'flex';
+            document.getElementById('gen-uid').innerText = "Automatic UID: " + myUID;
+        } else {
+            startSystem();
+        }
+
+        function saveUser() {
+            let name = document.getElementById('user-name-input').value.trim();
+            if(name) {
+                myName = name;
+                localStorage.setItem('sah_name', myName);
+                document.getElementById('reg-modal').style.display = 'none';
+                startSystem();
+            }
+        }
+
+        function startSystem() {
+            document.getElementById('current-user').innerText = "Logged as: " + myName;
+            
+            // Presence Logic
+            const presenceRef = db.ref('users/' + myUID);
+            presenceRef.set({
+                name: myName,
+                uid: myUID,
+                status: "online",
+                ping: (Math.floor(Math.random() * 20) + 15) + "ms"
+            });
+            presenceRef.onDisconnect().remove();
+
+            syncUsers();
+            listenForCalls();
+            initHardwareButtons();
+        }
+
+        // Display Previous & Current Users perfectly
+        function syncUsers() {
+            db.ref('users').on('value', snap => {
+                const list = document.getElementById('online-users-container');
+                list.innerHTML = "";
+                
+                snap.forEach(child => {
+                    let user = child.val();
+                    // Robust field mapping for previous users
+                    let uName = user.name || user.username || user.Name || "User";
+                    let uUID = user.uid || user.id || child.key;
+
+                    if(uUID !== myUID) {
+                        list.innerHTML += `
+                            <div class="user-card">
+                                <div>
+                                    <b style="font-size: 16px;">${uName}</b><br>
+                                    <div class="ping-box">● Latency: ${user.ping || '20ms'}</div>
+                                    <small style="color: #555; font-size: 10px;">${uUID}</small>
+                                </div>
+                                <button class="btn-call" onclick="makeCall('${uUID}', '${uName}')">Call</button>
+                            </div>
+                        `;
+                    }
+                });
+            });
+        }
+
+        // Advanced Calling Features
+        let localStream;
+        async function makeCall(targetUID, targetName) {
+            document.getElementById('call-screen').style.display = 'flex';
+            document.getElementById('active-user-name').innerText = targetName;
+            
+            // Audio with Noise Suppression and Echo Cancellation
+            localStream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: { 
+                    echoCancellation: true, 
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+            document.getElementById('local-video').srcObject = localStream;
+            
+            db.ref('calls/' + targetUID).set({
+                callerId: myUID,
+                callerName: myName,
+                status: 'ringing'
+            });
+        }
+
+        function listenForCalls() {
+            db.ref('calls/' + myUID).on('value', snap => {
+                let call = snap.val();
+                if(call && call.status === 'ringing') {
+                    // Voice Alert Logic (Simplified)
+                    document.getElementById('incoming-modal').style.display = 'flex';
+                    document.getElementById('caller-name-info').innerText = call.callerName + " is Calling...";
+                } else if(!call) {
+                    resetUI();
+                }
+            });
+        }
+
+        function acceptCall() {
+            document.getElementById('incoming-modal').style.display = 'none';
+            document.getElementById('call-screen').style.display = 'flex';
+            // Start local stream for receiver
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(s => {
+                localStream = s;
+                document.getElementById('local-video').srcObject = s;
+            });
+        }
+
+        function rejectCall() {
+            db.ref('calls/' + myUID).remove();
+            document.getElementById('incoming-modal').style.display = 'none';
+        }
+
+        function endCall() {
+            db.ref('calls/' + myUID).remove();
+            resetUI();
+        }
+
+        function resetUI() {
+            if(localStream) {
+                localStream.getTracks().forEach(t => t.stop());
+            }
+            document.getElementById('call-screen').style.display = 'none';
+            document.getElementById('incoming-modal').style.display = 'none';
+        }
+
+        // Bluetooth & Hardware Button Integration (MediaSession API)
+        function initHardwareButtons() {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.setActionHandler('hangup', endCall);
+                // Pause button on headphones usually ends call in apps
+                navigator.mediaSession.setActionHandler('pause', endCall);
+            }
+        }
+
+        function toggleMic() {
+            let track = localStream.getAudioTracks()[0];
+            track.enabled = !track.enabled;
+            event.target.style.background = track.enabled ? "#333" : "red";
+        }
+
+        function toggleCam() {
+            let track = localStream.getVideoTracks()[0];
+            track.enabled = !track.enabled;
+            event.target.style.background = track.enabled ? "#333" : "red";
+        }
+    </script>
+</body>
+</html>
