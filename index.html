@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saharaj Real-time Call</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --bg: #0f0f1a; --card: #1e1e2e; --primary: #007bff; --danger: #ff4757; --text: #ffffff; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; overflow: hidden; }
+        
+        /* Setup Screen */
+        #setup-screen { position: fixed; inset: 0; background: var(--bg); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .setup-box { background: var(--card); padding: 30px; border-radius: 20px; text-align: center; width: 85%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        input { width: 90%; padding: 12px; margin: 20px 0; border-radius: 10px; border: none; font-size: 16px; background: #2a2a3d; color: white; outline: none; }
+        button { background: var(--primary); color: white; border: none; padding: 12px 25px; border-radius: 10px; cursor: pointer; width: 100%; font-weight: bold; }
+
+        /* Main Dashboard */
+        #main-dashboard { padding: 20px; height: 100vh; box-sizing: border-box; display: none; }
+        .user-item { background: var(--card); padding: 15px; margin-bottom: 12px; border-radius: 15px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
+        .status-dot { width: 10px; height: 10px; background: #2ecc71; border-radius: 50%; display: inline-block; margin-right: 10px; }
+        .call-btn { background: #27ae60; width: auto; padding: 8px 20px; font-size: 14px; }
+
+        /* Call Screen UI */
+        #call-screen { position: fixed; inset: 0; background: #000; display: none; flex-direction: column; align-items: center; justify-content: space-around; z-index: 2000; }
+        .avatar { width: 120px; height: 120px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 50px; border: 5px solid #222; }
+        .call-controls { display: flex; gap: 20px; }
+        .btn-round { width: 65px; height: 65px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; }
+        .end-call { background: var(--danger); }
+        .toggle-btn { background: #333; color: white; }
+    </style>
+</head>
+<body>
+
+    <div id="setup-screen">
+        <div class="setup-box">
+            <h2 style="color: var(--primary);">Welcome Mr. Saharaj</h2>
+            <p>আপনার নাম লিখুন শুরু করার জন্য</p>
+            <input type="text" id="username-input" placeholder="আপনার নাম এখানে লিখুন...">
+            <button onclick="registerUser()">Start Now</button>
+        </div>
+    </div>
+
+    <div id="main-dashboard">
+        <div style="display:flex; justify-content: space-between; align-items: center;">
+            <h2 id="display-name">Loading...</h2>
+            <span id="my-uid" style="font-size: 10px; opacity: 0.5;"></span>
+        </div>
+        <hr style="opacity: 0.1; margin: 20px 0;">
+        <div id="user-list">
+            <p style="text-align: center; opacity: 0.5;">খুঁজছি কে কে অনলাইনে আছে...</p>
+        </div>
+    </div>
+
+    <div id="call-screen">
+        <div style="text-align: center;">
+            <div class="avatar">👤</div>
+            <h2 id="remote-user-name">User Name</h2>
+            <p id="call-timer">Connecting...</p>
+        </div>
+        <div class="call-controls">
+            <button id="mic-btn" class="btn-round toggle-btn" onclick="toggleMic()">🎙️</button>
+            <button id="speaker-btn" class="btn-round toggle-btn" onclick="toggleSpeaker()">🔊</button>
+            <button class="btn-round end-call" onclick="hangup()">📞</button>
+        </div>
+    </div>
+
+    <audio id="remote-audio" autoplay></audio>
+
+    <script>
+        // --- Firebase Config ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAMvHlgZmaxdNIHWMVc8nXb1h-A0YUR0qI",
+            projectId: "mycallingapp-8677d",
+            databaseURL: "https://mycallingapp-8677d-default-rtdb.firebaseio.com",
+            storageBucket: "mycallingapp-8677d.firebasestorage.app"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let myId = localStorage.getItem('saharaj_uid') || "UID-" + Date.now();
+        let myName = localStorage.getItem('saharaj_name');
+        let localStream;
+        let pc;
+        const rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+        // --- Initialization ---
+        window.onload = async () => {
+            if (myName) {
+                showDashboard();
+                await setupMedia();
+                listenForCalls();
+            }
+        };
+
+        async function setupMedia() {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+        }
+
+        function registerUser() {
+            const input = document.getElementById('username-input').value;
+            if (input) {
+                localStorage.setItem('saharaj_name', input);
+                localStorage.setItem('saharaj_uid', myId);
+                location.reload();
+            }
+        }
+
+        function showDashboard() {
+            document.getElementById('setup-screen').style.display = 'none';
+            document.getElementById('main-dashboard').style.display = 'block';
+            document.getElementById('display-name').innerText = "Hello, " + myName;
+            document.getElementById('my-uid').innerText = myId;
+            
+            const myStatusRef = db.ref('online_users/' + myId);
+            myStatusRef.set({ name: myName, id: myId, status: 'online' });
+            myStatusRef.onDisconnect().remove();
+            
+            loadUserList();
+        }
+
+        function loadUserList() {
+            db.ref('online_users').on('value', snap => {
+                const list = document.getElementById('user-list');
+                list.innerHTML = "";
+                snap.forEach(child => {
+                    const user = child.val();
+                    if (user.id !== myId) {
+                        list.innerHTML += `
+                            <div class="user-item">
+                                <span><span class="status-dot"></span>${user.name}</span>
+                                <button class="call-btn" onclick="callUser('${user.id}', '${user.name}')">📞 Call</button>
+                            </div>`;
+                    }
+                });
+            });
+        }
+
+        // --- Signaling Logic ---
+        async function callUser(targetId, targetName) {
+            document.getElementById('call-screen').style.display = 'flex';
+            document.getElementById('remote-user-name').innerText = targetName;
+            
+            pc = new RTCPeerConnection(rtcConfig);
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+            pc.onicecandidate = e => {
+                if (e.candidate) db.ref(`calls/${targetId}/candidate`).set(JSON.stringify(e.candidate));
+            };
+
+            pc.ontrack = e => { document.getElementById('remote-audio').srcObject = e.streams[0]; };
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            
+            db.ref(`calls/${targetId}`).set({
+                offer: JSON.stringify(offer),
+                callerName: myName,
+                callerId: myId
+            });
+
+            db.ref(`calls/${targetId}/answer`).on('value', async snap => {
+                if (snap.val()) {
+                    await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(snap.val())));
+                    document.getElementById('call-timer').innerText = "In Call";
+                }
+            });
+        }
+
+        function listenForCalls() {
+            db.ref(`calls/${myId}`).on('value', async snap => {
+                const data = snap.val();
+                if (data && data.offer && !pc) {
+                    if (confirm(data.callerName + " আপনাকে কল করছে! রিসিভ করবেন?")) {
+                        document.getElementById('call-screen').style.display = 'flex';
+                        document.getElementById('remote-user-name').innerText = data.callerName;
+                        
+                        pc = new RTCPeerConnection(rtcConfig);
+                        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+                        pc.onicecandidate = e => {
+                            if (e.candidate) db.ref(`calls/${myId}/candidate_resp`).set(JSON.stringify(e.candidate));
+                        };
+
+                        pc.ontrack = e => { document.getElementById('remote-audio').srcObject = e.streams[0]; };
+
+                        await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(data.offer)));
+                        const answer = await pc.createAnswer();
+                        await pc.setLocalDescription(answer);
+                        
+                        db.ref(`calls/${myId}/answer`).set(JSON.stringify(answer));
+                    }
+                }
+            });
+        }
+
+        // --- Mic & Speaker Controls ---
+        function toggleMic() {
+            const audioTrack = localStream.getAudioTracks()[0];
+            audioTrack.enabled = !audioTrack.enabled;
+            document.getElementById('mic-btn').innerText = audioTrack.enabled ? "🎙️" : "🔇";
+        }
+
+        function toggleSpeaker() {
+            const audio = document.getElementById('remote-audio');
+            // ব্রাউজার যদি SinkId সাপোর্ট করে (Chrome)
+            if (audio.setSinkId) {
+                alert("Speaker switched!");
+            }
+        }
+
+        function hangup() {
+            db.ref(`calls/${myId}`).remove();
+            location.reload();
+        }
+    </script>
+</body>
+</html>
