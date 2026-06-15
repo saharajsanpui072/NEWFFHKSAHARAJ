@@ -99,14 +99,18 @@
         }
         .deposit-btn-new, .withdraw-btn-new {
             position: relative;
-            background: #1a1a2e;
             border-radius: 0.75rem;
             overflow: hidden;
             transition: all 0.3s ease;
         }
+        .deposit-btn-new {
+            background: #1a1a2e;
+        }
+        .withdraw-btn-new {
+            background: #0f172a;
+        }
         .deposit-btn-new:hover, .withdraw-btn-new:hover {
             transform: translateY(-2px);
-            background: #16213e;
         }
         .deposit-btn-new .bg-logo, .withdraw-btn-new .bg-logo {
             position: absolute;
@@ -115,6 +119,60 @@
             font-size: 3rem;
             opacity: 0.08;
             pointer-events: none;
+        }
+        .pending-effect {
+            filter: blur(1px);
+            animation: pendingBlink 1s infinite;
+        }
+        @keyframes pendingBlink {
+            0% { background-color: #1a1a2e; box-shadow: 0 0 0px rgba(239,68,68,0); }
+            50% { background-color: #3b0a0a; box-shadow: 0 0 15px rgba(239,68,68,0.5); }
+            100% { background-color: #1a1a2e; box-shadow: 0 0 0px rgba(239,68,68,0); }
+        }
+        .pending-text {
+            color: #ef4444;
+            font-size: 8px;
+            font-weight: bold;
+            text-transform: uppercase;
+            animation: textBlink 1s infinite;
+            margin-top: 2px;
+        }
+        @keyframes textBlink {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; text-shadow: 0 0 3px #ef4444; }
+            100% { opacity: 0.5; }
+        }
+        .countdown-timer {
+            font-size: 7px;
+            color: #facc15;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        .tooltip-popup {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e293b;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 12px;
+            font-size: 11px;
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            border-left: 4px solid #ef4444;
+            max-width: 90%;
+            text-align: center;
+        }
+        .tooltip-popup button {
+            background: none;
+            border: none;
+            color: #facc15;
+            font-size: 14px;
+            cursor: pointer;
         }
         #catCard-clash_squad {
             background: linear-gradient(135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.05) 100%), url('https://ibb.co/yBMCJZyM/clash-squad-ff.jpg');
@@ -323,18 +381,20 @@
             </div>
 
             <div class="w-full grid grid-cols-2 text-center text-xs font-bold">
-                <div onclick="openDepositModal()" class="deposit-btn-new py-3 cursor-pointer transition-all flex items-center justify-center gap-2.5 border-b-2 border-transparent hover:border-yellow-500 relative">
+                <div onclick="openDepositModal()" class="deposit-btn-new py-3 cursor-pointer transition-all flex items-center justify-center gap-2.5 border-b-2 border-transparent hover:border-yellow-500 relative" id="depositBtn">
                     <div class="bg-logo"><i class="fas fa-plus-circle"></i></div>
                     <div class="text-left relative z-10">
                         <p class="text-[8px] text-slate-300 uppercase tracking-widest font-bold">DEPOSIT WALLET</p>
                         <p class="text-xs font-extrabold text-yellow-500">₹ <span id="lblDepositBalance">0.00</span></p>
+                        <div id="depositPendingInfo" class="hidden flex flex-col items-start"></div>
                     </div>
                 </div>
-                <div onclick="openWithdrawalModal()" class="withdraw-btn-new py-3 cursor-pointer transition-all flex items-center justify-center gap-2.5 border-b-2 border-transparent hover:border-emerald-500 relative">
+                <div onclick="openWithdrawalModal()" class="withdraw-btn-new py-3 cursor-pointer transition-all flex items-center justify-center gap-2.5 border-b-2 border-transparent hover:border-emerald-500 relative" id="withdrawBtn">
                     <div class="bg-logo"><i class="fas fa-hand-holding-usd"></i></div>
                     <div class="text-left relative z-10">
                         <p class="text-[8px] text-slate-300 uppercase tracking-widest font-bold">WIN BALANCE</p>
                         <p class="text-xs font-extrabold text-emerald-500">₹ <span id="lblWinBalance">0.00</span></p>
+                        <div id="withdrawPendingInfo" class="hidden flex flex-col items-start"></div>
                     </div>
                 </div>
             </div>
@@ -447,7 +507,7 @@
         </div>
     </div>
 
-    <!-- Category Overlay (NEW) -->
+    <!-- Category Overlay -->
     <div id="categoryOverlay" class="category-overlay">
         <div class="category-overlay-header">
             <div class="flex items-center gap-3">
@@ -481,7 +541,7 @@
         </div>
     </div>
 
-    <!-- MODAL: RULES POPUP (NEW) -->
+    <!-- MODAL: RULES POPUP -->
     <div id="rulesModal" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4 overflow-y-auto">
         <div class="modal-card w-full max-w-md glass-modal rounded-2xl overflow-hidden border border-yellow-500/30 shadow-2xl rules-effect">
             <div class="bg-gradient-to-r from-purple-600 to-yellow-600 px-5 py-3 flex justify-between items-center">
@@ -778,6 +838,10 @@
         </div>
     </div>
 
+    <div id="globalTooltip" class="tooltip-popup hidden">
+        <span id="tooltipMessage"></span>
+        <button onclick="closeTooltip()">✕</button>
+    </div>
 
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -810,8 +874,11 @@
         
         // Withdrawal lock state
         let withdrawalLockActive = false;
-        let withdrawalRequestPending = false;
-        let withdrawalTimeoutRef = null;
+        let depositLockActive = false;
+        let pendingWithdrawId = null;
+        let pendingDepositId = null;
+        let pendingWithdrawTimer = null;
+        let pendingDepositTimer = null;
 
         // SUBSCRIPTION STATE ENGINE VARIABLE MAPPINGS
         let selectedSubPackMetadata = null;
@@ -842,32 +909,12 @@
                 }
             });
             
-            // Style deposit and withdrawal buttons
-            applyNewButtonStyles();
+            // Apply styles
+            const depositDiv = document.querySelector('#depositBtn');
+            const withdrawDiv = document.querySelector('#withdrawBtn');
+            if(depositDiv) depositDiv.classList.add('deposit-btn-new');
+            if(withdrawDiv) withdrawDiv.classList.add('withdraw-btn-new');
         });
-        
-        function applyNewButtonStyles() {
-            const depositDiv = document.querySelector('[onclick="openDepositModal()"]');
-            const withdrawDiv = document.querySelector('[onclick="openWithdrawalModal()"]');
-            if (depositDiv) {
-                depositDiv.classList.add('deposit-btn-new');
-                depositDiv.style.background = '#1a1a2e';
-                depositDiv.style.color = 'white';
-                const bgLogo = document.createElement('div');
-                bgLogo.className = 'bg-logo';
-                bgLogo.innerHTML = '<i class="fas fa-plus-circle"></i>';
-                depositDiv.insertBefore(bgLogo, depositDiv.firstChild);
-            }
-            if (withdrawDiv) {
-                withdrawDiv.classList.add('withdraw-btn-new');
-                withdrawDiv.style.background = '#1a1a2e';
-                withdrawDiv.style.color = 'white';
-                const bgLogo = document.createElement('div');
-                bgLogo.className = 'bg-logo';
-                bgLogo.innerHTML = '<i class="fas fa-hand-holding-usd"></i>';
-                withdrawDiv.insertBefore(bgLogo, withdrawDiv.firstChild);
-            }
-        }
 
         // Live Internet Network Interruption Locking Engine
         function initializeNetworkConnectivityEngine() {
@@ -1067,65 +1114,110 @@
             });
         }
 
-        function checkWithdrawalLockStatus() {
+        function checkPendingRequests() {
             if (!activeUserSession) return;
+            
+            // Check withdrawals
             database.ref('withdrawals').orderByChild('uid').equalTo(activeUserSession).once('value', snapshot => {
-                let hasPending = false;
                 if (snapshot.exists()) {
-                    Object.values(snapshot.val()).forEach(w => {
-                        if (w.status === 'pending') hasPending = true;
-                    });
-                }
-                withdrawalLockActive = hasPending;
-                updateWithdrawButtonLockState();
-            });
-        }
-        
-        function updateWithdrawButtonLockState() {
-            const withdrawDiv = document.querySelector('[onclick="openWithdrawalModal()"]');
-            if (withdrawDiv) {
-                if (withdrawalLockActive) {
-                    withdrawDiv.style.opacity = '0.6';
-                    withdrawDiv.style.pointerEvents = 'none';
-                    withdrawDiv.title = 'Withdrawal locked due to pending request';
-                } else {
-                    withdrawDiv.style.opacity = '1';
-                    withdrawDiv.style.pointerEvents = 'auto';
-                }
-            }
-        }
-
-        function autoExpirePendingDeposits() {
-            database.ref('deposits').once('value', snapshot => {
-                if (snapshot.exists()) {
-                    Object.entries(snapshot.val()).forEach(([id, d]) => {
-                        if (d.status === 'pending' && (Date.now() - (d.timestamp || 0)) > 48 * 60 * 60 * 1000) {
-                            database.ref('deposits/' + id).remove().then(() => {
-                                triggerSystemAlert("AUTO RELEASE", `Deposit expired after 48h, lock removed.`);
-                            });
+                    Object.entries(snapshot.val()).forEach(([id, w]) => {
+                        if (w.status === 'pending') {
+                            withdrawalLockActive = true;
+                            pendingWithdrawId = id;
+                            showPendingState('withdraw', id, w.unixTimestamp);
                         }
                     });
+                } else {
+                    withdrawalLockActive = false;
+                    pendingWithdrawId = null;
+                    hidePendingState('withdraw');
                 }
             });
             
-            // Auto-expire withdrawals after 48 hours
-            database.ref('withdrawals').once('value', snapshot => {
+            // Check deposits
+            database.ref('deposits').orderByChild('uid').equalTo(activeUserSession).once('value', snapshot => {
                 if (snapshot.exists()) {
-                    Object.entries(snapshot.val()).forEach(([id, w]) => {
-                        if (w.status === 'pending' && (Date.now() - (w.unixTimestamp || 0)) > 48 * 60 * 60 * 1000) {
-                            // Auto-reject and refund
-                            database.ref('users/' + w.uid + '/winBalance').transaction(bal => (bal || 0) + parseFloat(w.amount));
-                            database.ref('withdrawals/' + id).remove().then(() => {
-                                triggerSystemAlert("AUTO REFUND", `Withdrawal expired after 48h, refunded to win balance.`);
-                                if (activeUserSession === w.uid) {
-                                    withdrawalLockActive = false;
-                                    updateWithdrawButtonLockState();
-                                }
-                            });
+                    Object.entries(snapshot.val()).forEach(([id, d]) => {
+                        if (d.status === 'pending') {
+                            depositLockActive = true;
+                            pendingDepositId = id;
+                            showPendingState('deposit', id, d.timestamp);
                         }
                     });
+                } else {
+                    depositLockActive = false;
+                    pendingDepositId = null;
+                    hidePendingState('deposit');
                 }
             });
+        }
+        
+        function showPendingState(type, requestId, timestamp) {
+            const btnDiv = document.getElementById(type === 'withdraw' ? 'withdrawBtn' : 'depositBtn');
+            if (!btnDiv) return;
+            
+            btnDiv.classList.add('pending-effect');
+            const pendingDiv = document.getElementById(`${type}PendingInfo`);
+            if (pendingDiv) {
+                pendingDiv.classList.remove('hidden');
+                pendingDiv.innerHTML = `<span class="pending-text">⏳ PENDING</span>
+                                        <span class="countdown-timer" id="${type}Countdown"></span>`;
+                startCountdown(type, timestamp);
+            }
+            btnDiv.style.pointerEvents = 'none';
+            btnDiv.style.opacity = '0.8';
+        }
+        
+        function hidePendingState(type) {
+            const btnDiv = document.getElementById(type === 'withdraw' ? 'withdrawBtn' : 'depositBtn');
+            if (!btnDiv) return;
+            btnDiv.classList.remove('pending-effect');
+            const pendingDiv = document.getElementById(`${type}PendingInfo`);
+            if (pendingDiv) pendingDiv.classList.add('hidden');
+            btnDiv.style.pointerEvents = 'auto';
+            btnDiv.style.opacity = '1';
+            if (type === 'withdraw') withdrawalLockActive = false;
+            if (type === 'deposit') depositLockActive = false;
+        }
+        
+        function startCountdown(type, startTime) {
+            const expiryTime = startTime + (48 * 60 * 60 * 1000);
+            const countdownEl = document.getElementById(`${type}Countdown`);
+            if (!countdownEl) return;
+            
+            const interval = setInterval(() => {
+                const remaining = expiryTime - Date.now();
+                if (remaining <= 0) {
+                    clearInterval(interval);
+                    countdownEl.innerText = 'Expired';
+                    if (type === 'withdraw' && pendingWithdrawId) {
+                        database.ref('users/' + activeUserSession + '/winBalance').transaction(bal => (bal || 0) + (window._pendingWithdrawAmount || 0));
+                        database.ref('withdrawals/' + pendingWithdrawId).remove();
+                    }
+                    if (type === 'deposit' && pendingDepositId) {
+                        database.ref('deposits/' + pendingDepositId).remove();
+                    }
+                    hidePendingState(type);
+                } else {
+                    const hours = Math.floor(remaining / (1000 * 60 * 60));
+                    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+                    countdownEl.innerText = `Auto-cancel: ${hours}h ${minutes}m`;
+                }
+            }, 1000);
+            window[`${type}Interval`] = interval;
+        }
+
+        function showTooltip(message) {
+            const tooltip = document.getElementById('globalTooltip');
+            if(!tooltip) return;
+            document.getElementById('tooltipMessage').innerText = message;
+            tooltip.classList.remove('hidden');
+            setTimeout(() => { if(tooltip) tooltip.classList.add('hidden'); }, 5000);
+        }
+        
+        function closeTooltip() {
+            const tooltip = document.getElementById('globalTooltip');
+            if(tooltip) tooltip.classList.add('hidden');
         }
 
         function establishActiveUserContext(uid) {
@@ -1165,19 +1257,15 @@
                 }
                 
                 setupWinBalanceListener();
-                checkWithdrawalLockStatus();
+                checkPendingRequests();
                 
                 synchronizeUserSubscriptionRealtimeEngine();
                 updateCategoryCounters();
             });
         }
 
-        database.ref('deposits').on('value', () => {
-            checkWithdrawalLockStatus();
-        });
-
-        setInterval(autoExpirePendingDeposits, 60 * 60 * 1000);
-        autoExpirePendingDeposits();
+        database.ref('deposits').on('value', () => checkPendingRequests());
+        database.ref('withdrawals').on('value', () => checkPendingRequests());
 
         function renderUserHeaderTelemetry() {
             if (!userProfileData) return;
@@ -1477,7 +1565,7 @@
         }
 
         // ========================================================================
-        // CATEGORY OVERLAY SYSTEM (NEW)
+        // CATEGORY OVERLAY SYSTEM (unchanged)
         // ========================================================================
         
         function openCategoryOverlay(catId) {
@@ -1577,7 +1665,7 @@
         }
 
         // ========================================================================
-        // MATCH DETAIL POPUP WITH RULES BUTTON (UPDATED)
+        // MATCH DETAIL POPUP WITH RULES BUTTON & WORKING CLOSE (UPDATED)
         // ========================================================================
         
         function openMatchDetailModal(matchId) {
@@ -1593,19 +1681,17 @@
             const isFull = totalPlayers >= maxSlots;
             
             let joinButtonHtml = '';
+            let countdownTimerHtml = '';
+            
             if (isStarted) {
                 joinButtonHtml = `<button class="w-full bg-gray-400 text-white font-bold py-3 rounded-lg text-sm uppercase cursor-not-allowed" disabled><i class="fas fa-ban mr-2"></i>Match Already Started</button>`;
             } else if (isJoined) {
-                const timeLeft = startTime - now;
-                const mins = Math.floor(timeLeft / 60000);
-                const secs = Math.floor((timeLeft % 60000) / 1000);
-                joinButtonHtml = `
-                    <div class="bg-gradient-to-r from-amber-50 to-yellow-50 p-3 rounded-lg text-center border border-yellow-500/30">
-                        <p class="text-xs text-amber-600 font-bold uppercase tracking-wider">You have joined this match</p>
-                        <p class="text-lg font-mono font-bold text-yellow-600 mt-1">${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}</p>
-                        <p class="text-[10px] text-slate-500">until match starts</p>
-                    </div>
-                `;
+                countdownTimerHtml = `<div class="bg-gradient-to-r from-amber-50 to-yellow-50 p-3 rounded-lg text-center border border-yellow-500/30" id="matchCountdownContainer">
+                                        <p class="text-xs text-amber-600 font-bold uppercase tracking-wider">You have joined this match</p>
+                                        <p class="text-lg font-mono font-bold text-yellow-600 mt-1" id="matchCountdownTimer">--:--</p>
+                                        <p class="text-[10px] text-slate-500">until match starts</p>
+                                      </div>`;
+                startMatchCountdown(startTime);
             } else if (isFull) {
                 joinButtonHtml = `<button class="w-full bg-gray-400 text-white font-bold py-3 rounded-lg text-sm uppercase cursor-not-allowed" disabled><i class="fas fa-users-slash mr-2"></i>Lobby Full</button>`;
             } else {
@@ -1645,9 +1731,10 @@
                         <p class="text-sm font-bold text-slate-800">${parseCustomTimestampToDateBadge(match.startTimeStamp)}</p>
                     </div>
                     ${roomIdHtml}
+                    ${countdownTimerHtml}
                     <div class="grid grid-cols-3 gap-2">
-                        <button onclick="openLeaderboardModal('${matchId}'); closeMatchDetailModal();" class="gold-card py-2 text-yellow-600 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1"><i class="fas fa-trophy"></i> Prize</button>
-                        <button onclick="openJoinedPlayersModal('${matchId}'); closeMatchDetailModal();" class="gold-card py-2 text-slate-600 rounded-lg text-xs font-bold uppercase tracking-wider"><i class="fas fa-users"></i> Players</button>
+                        <button onclick="openLeaderboardModal('${matchId}');" class="gold-card py-2 text-yellow-600 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1"><i class="fas fa-trophy"></i> Prize</button>
+                        <button onclick="openJoinedPlayersModal('${matchId}');" class="gold-card py-2 text-slate-600 rounded-lg text-xs font-bold uppercase tracking-wider"><i class="fas fa-users"></i> Players</button>
                         <button onclick="openRulesFromMatch('${match.category}')" class="gold-card py-2 text-purple-600 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1"><i class="fas fa-gavel"></i> Rules</button>
                     </div>
                     ${joinButtonHtml}
@@ -1656,6 +1743,24 @@
             
             document.getElementById('matchDetailModalContent').innerHTML = content;
             document.getElementById('matchDetailModal').classList.remove('hidden');
+        }
+        
+        let matchCountdownInterval = null;
+        function startMatchCountdown(targetTime) {
+            if(matchCountdownInterval) clearInterval(matchCountdownInterval);
+            matchCountdownInterval = setInterval(() => {
+                const remaining = targetTime - Date.now();
+                const timerElement = document.getElementById('matchCountdownTimer');
+                if(!timerElement) { if(matchCountdownInterval) clearInterval(matchCountdownInterval); return; }
+                if(remaining <= 0) {
+                    if(matchCountdownInterval) clearInterval(matchCountdownInterval);
+                    timerElement.innerText = "00:00";
+                    return;
+                }
+                const mins = Math.floor(remaining / 60000);
+                const secs = Math.floor((remaining % 60000) / 1000);
+                timerElement.innerText = `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+            }, 1000);
         }
         
         function openRulesFromMatch(categoryKey) {
@@ -1712,7 +1817,7 @@
         });
 
         // ========================================================================
-        // ALERT BAR SYSTEMS & MATCH DISPATCH OVERRIDES (unchanged)
+        // ALERT BAR SYSTEMS & MATCH DISPATCH OVERRIDES
         // ========================================================================
         function processSystemLobbyTickUpdates() {
             currentLobbyCounters = { clash_squad: 0, classic_bermuda: 0, lone_wolf: 0, history_terminal: 0 };
@@ -1725,13 +1830,6 @@
                 const match = globalMatchesMap[mId];
                 const startTime = parseInt(match.startTimeStamp);
                 const expiryThreshold = startTime + (5 * 60 * 1000); 
-                const purgeThreshold = startTime + (24 * 60 * 60 * 1000); 
-                
-                // AUTO DELETE DISABLED - matches never auto delete
-                // if (now >= purgeThreshold) {
-                //     database.ref('matches/' + mId).remove();
-                //     return; 
-                // }
 
                 if (now >= expiryThreshold && match.category !== 'history_terminal') {
                     const upgradedMatchNode = { ...match, category: 'history_terminal' };
@@ -1829,6 +1927,7 @@
             return `${day}-${month}-${year} 🟢 ${hours}:${minutes} ${ampm}`;
         }
 
+        // MODAL FUNCTIONS (FIXED CLOSE - NO PAGE RELOAD)
         function openJoinedPlayersModal(matchId) {
             const match = globalMatchesMap[matchId];
             if (!match) return;
@@ -1841,7 +1940,7 @@
             const keys = Object.keys(participantsMap).sort((a,b) => participantsMap[a].timestampJoined - participantsMap[b].timestampJoined);
 
             if (keys.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="3" class="py-4 text-center text-slate-500 font-medium">No active operant signatures locked inside this lobby yet.</td></table>`;
+                tbody.innerHTML = `<tr><td colspan="3" class="py-4 text-center text-slate-500 font-medium">No active operant signatures locked inside this lobby yet.</td></tr>`;
             } else {
                 keys.forEach((k, idx) => {
                     const p = participantsMap[k];
@@ -1870,15 +1969,12 @@
             document.getElementById('mdlJoinedPlayersHub').classList.add('hidden');
         }
 
-        // Deposit Modal Functions (unchanged)
+        // Deposit Modal Functions
         function openDepositModal() {
             if (!userProfileData) return;
             
-            if (withdrawalLockActive) {
-                document.getElementById('depositGateFormLayout').classList.add('hidden');
-                document.getElementById('depositGateQRLayout').classList.add('hidden');
-                document.getElementById('depositGateLockedState').classList.remove('hidden');
-                document.getElementById('mdlDeposit').classList.remove('hidden');
+            if (depositLockActive) {
+                showTooltip("This request is pending. Please wait for admin approval or rejection. Otherwise, it will auto-cancel after the countdown ends.");
                 return;
             }
             
@@ -1952,6 +2048,7 @@
                     closeDepositModal();
                     document.getElementById('txtDepositUtr').value = "";
                     document.getElementById('txtDepositAmount').value = "";
+                    checkPendingRequests();
                 })
                 .catch(err => triggerSystemAlert("SERVER FAULT", err.message));
         }
@@ -1959,7 +2056,7 @@
         function openWithdrawalModal() {
             if (!userProfileData) return;
             if (withdrawalLockActive) {
-                triggerSystemAlert("WITHDRAWAL LOCKED", "You already have a pending withdrawal request. Please wait for admin approval or rejection.");
+                showTooltip("This request is pending. Please wait for admin approval or rejection. Otherwise, it will auto-cancel after the countdown ends.");
                 return;
             }
             document.getElementById('lblWithdrawMaxPool').innerText = parseFloat(userProfileData.winBalance).toFixed(2);
@@ -1990,6 +2087,7 @@
             }
 
             const uniqueWdId = "WDR_" + Date.now();
+            window._pendingWithdrawAmount = amount;
 
             const withdrawalPipelinePayload = {
                 withdrawalId: uniqueWdId,
@@ -2012,7 +2110,7 @@
                         .then(() => {
                             triggerSystemAlert("WITHDRAWAL LOGGED", "Requested funds held in state safely pending verification sequence operations.");
                             withdrawalLockActive = true;
-                            updateWithdrawButtonLockState();
+                            checkPendingRequests();
                             closeWithdrawalModal();
                         });
                 } else {
@@ -2110,6 +2208,8 @@
                                 if (document.getElementById('categoryOverlay').classList.contains('active')) {
                                     openCategoryOverlay(selectedCategory);
                                 }
+                                const matchStartTime = freshMatch.startTimeStamp;
+                                if(matchStartTime) startMatchCountdown(parseInt(matchStartTime));
                             });
                     } else {
                         triggerSystemAlert("SECURITY TERMINAL REFUSE", "Financial balance validation operations aborted safely.");
@@ -2129,10 +2229,6 @@
             });
         }
 
-        function closeRulesModalOld() {
-            document.getElementById('mdlRules').classList.add('hidden');
-        }
-
         function openLeaderboardModal(matchId) {
             const match = globalMatchesMap[matchId];
             if (!match) return;
@@ -2145,7 +2241,7 @@
             const keys = Object.keys(participantsMap);
 
             if (keys.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-slate-500">No registered participant signatures found inside workspace.</td></td>`;
+                tbody.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-slate-500">No registered participant signatures found inside workspace.</td></tr>`;
             } else {
                 const sortedPlayers = keys.map(k => participantsMap[k]).sort((a, b) => {
                     let rA = parseInt(a.rank) || 999;
@@ -2358,7 +2454,6 @@
         window.closeCategoryOverlay = closeCategoryOverlay;
         window.closeRulesModal = closeRulesModal;
         window.openRulesFromMatch = openRulesFromMatch;
-        window.closeRulesModalOld = closeRulesModalOld;
         window.closeSubscriptionModal = closeSubscriptionModal;
         window.closeProfileModal = closeProfileModal;
         window.closeFullCategoryOverlay = closeFullCategoryOverlay;
@@ -2391,6 +2486,7 @@
         window.openJoinedPlayersModal = openJoinedPlayersModal;
         window.toggleSystemMaintenanceModeState = toggleSystemMaintenanceModeState;
         window.copyStringDataToClipboard = copyStringDataToClipboard;
+        window.closeTooltip = closeTooltip;
     </script>
 </body>
 </html>
